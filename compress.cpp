@@ -399,7 +399,9 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         ifstream bpv_stream(compressed_file.c_str(), ios::in | ios::binary);
         streampos beginning = bpv_stream.tellg();
         bpv_stream.seekg( 0, ios::end );
-        cout << "bpv = " << (bpv_stream.tellg() - beginning)*8/double(size) << endl << flush;
+        long int newbits = (bpv_stream.tellg() - beginning)*8;
+        cout << "oldbits = " << size*type_size*8 << ", newbits = " << newbits << ", compressionrate = " << size*type_size*8/double(newbits)
+                << ", bpv = " << newbits/double(size) << endl << flush;
         bpv_stream.close();
     }
 

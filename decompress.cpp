@@ -195,9 +195,6 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     decode_factor(U2.get_array(),s[1],"tmp/U2_q","tmp/U2_limits","tmp/U2");
     decode_factor(U3.get_array(),s[2],"tmp/U3_q","tmp/U3_limits","tmp/U3");
     if (verbose) cout << "Done" << endl << flush;
-//    U1.read_from_raw("tmp/U1.raw");
-//    U2.read_from_raw("tmp/U2.raw");
-//    U3.read_from_raw("tmp/U3.raw");
 
     vmml::tensor<double> core(s[0],s[1],s[2]); // TODO
     core.set_memory(c);
@@ -206,19 +203,9 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     if (verbose) cout << "Done" << endl << flush;
 
     ofstream output_stream(output_file.c_str(), ios::out | ios::binary);
-//    output_stream.write(reinterpret_cast<char*>( &s[0] ),sizeof(int));
     double* r = reco.get_array();
     long int buf_elems = 1<<20;
     char* buffer = new char[io_type_size*buf_elems];
-//    void *buf;
-//    if (io_type == 0)
-//        buf = reinterpret_cast<unsigned char*>(buffer);
-//   else if (io_type == 1)
-//        buf = (int*)buffer;
-//    else if (io_type == 2)
-//        buf = (double*)buffer;
-//    else
-//        buf = (double*)buffer;
     long int buffer_wpos = 0;
     double sse = 0;
     double input_norm = 0;

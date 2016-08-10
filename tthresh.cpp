@@ -24,16 +24,19 @@ void print_usage() {
     cout << "\t-v: verbose mode" << endl;
     cout << "\t-d: print debug information" << endl;
     cout << endl;
-    cout << "Compression parameters (must be provided if -i is given):" << endl;
+    cout << "Compression parameters (needed if -i):" << endl;
+    cout << endl;
     cout << "\t-t <type>: input type (can be \"uchar\", \"int\", \"float\" or \"double\")" << endl;
     cout << "\t-s <x> <y> <z>: the volume size (3 integers)" << endl;
-    cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE and PSNR, respectively)" << endl;
+    cout << "\t-e | -r | -p <target>: target accuracy (3 real numbers: relative error, RMSE and PSNR, respectively)" << endl;
     cout << endl;
 }
 
 void display_error(string msg) {
-    cout << msg << endl;
+    cout << endl;
+    cout << "Error: " << msg << endl;
     cout << "Use \"tthresh -h\" for usage information" << endl;
+    cout << endl;
     exit(1);
 }
 
@@ -212,6 +215,5 @@ int main(int argc, char* argv[]) {
     }
     delete data;
 
-    cout << "Hello World!" << endl;
     return 0;
 }
