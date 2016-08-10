@@ -1,0 +1,3 @@
+[submodule "vmmlib-tensor"]
+	path = vmmlib-tensor
+	url = https://github.com/rballester/vmmlib-tensor.git
