@@ -8,13 +8,13 @@
 
 using namespace std;
 
-void decode() {
+void decode(string input_file, string output_file) {
 
     /*********************************************/
     // Read dictionary, encoding size and encoding
     /*********************************************/
 
-    ifstream input("tmp/mask.compressed", ios::binary );
+    ifstream input(input_file.c_str(), ios::binary );
     std::vector<char> buffer((istreambuf_iterator<char>(input)), istreambuf_iterator<char>());
 	int dict_size = reinterpret_cast<int*>( &buffer[0] )[0];
 	int *key_array = reinterpret_cast<int*>( &buffer[0] )+1;
@@ -79,7 +79,7 @@ void decode() {
 		result.push_back(write_byte);
 	}
 
-    ofstream output("tmp/mask.decompressed", ios::out | ios::binary);
+    ofstream output(output_file.c_str(), ios::out | ios::binary);
 	std::copy(result.begin(), result.end(), std::ostreambuf_iterator<char>(output));
     output.close();
 

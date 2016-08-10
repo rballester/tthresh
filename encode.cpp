@@ -1,4 +1,7 @@
-// This code is partly from of https://rosettacode.org/wiki/Huffman_coding (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html), which is a Huffman encoding implementation for C++. This version does a run-length encoding first, in order to efficiently compress a bit-stream.
+// This code is partly from of https://rosettacode.org/wiki/Huffman_coding
+// (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
+// which is a C++ Huffman encoding implementation. This version does a run-length encoding first,
+// in order to efficiently compress a bit-stream.
 
 #include <iostream>
 #include <fstream>
@@ -95,14 +98,14 @@ GenerateCodes(const INode * node, const HuffCode & prefix,
     }
 }
 
-void encode()
+void encode(string input_file, string output_file)
 {
 
     /*********************************************/
     // Perform run-length encoding into counters[]
     /*********************************************/
 
-    ifstream input("tmp/mask.raw", ios::binary);
+    ifstream input(input_file.c_str(), ios::binary);
     std::vector < char >
 	contents((istreambuf_iterator < char >(input)),
 		 istreambuf_iterator < char >());
@@ -171,7 +174,7 @@ void encode()
     // Save the dictionary and the translated codes
     /**********************************************/
 
-    ofstream output("tmp/mask.compressed", ios::out | ios::binary);
+    ofstream output(output_file.c_str(), ios::out | ios::binary);
     int dict_size = codes.size();
     output.write(reinterpret_cast < char *>(&dict_size), sizeof(int));
     output.write(reinterpret_cast < char *>(key_array),

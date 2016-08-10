@@ -21,21 +21,21 @@ void print_usage() {
     cout << "\t-i <input file>: input 3D volume (string). Either -i or -o (or both) must be specified" << endl;
     cout << "\t-z <compressed file>: name for the compressed result (string)" << endl;
     cout << "\t-o <output file>: if specified, the compressed file (-z) will be decompressed to this name (string)" << endl;
-    cout << "\t-v: verbose mode" << endl;
+    cout << "\t-v: verbose mode; prints main algorithm steps" << endl;
     cout << "\t-d: print debug information" << endl;
     cout << endl;
     cout << "Compression parameters (needed if -i):" << endl;
     cout << endl;
     cout << "\t-t <type>: input type (can be \"uchar\", \"int\", \"float\" or \"double\")" << endl;
     cout << "\t-s <x> <y> <z>: the volume size (3 integers)" << endl;
-    cout << "\t-e | -r | -p <target>: target accuracy (3 real numbers: relative error, RMSE and PSNR, respectively)" << endl;
+    cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE or PSNR, respectively)" << endl;
     cout << endl;
 }
 
 void display_error(string msg) {
     cout << endl;
     cout << "Error: " << msg << endl;
-    cout << "Use \"tthresh -h\" for usage information" << endl;
+    cout << "Run \"tthresh -h\" for usage information" << endl;
     cout << endl;
     exit(1);
 }
