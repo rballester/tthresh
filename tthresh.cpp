@@ -19,8 +19,8 @@ void print_usage() {
     cout << endl;
     cout << "\t-h: print this usage information and exit" << endl;
     cout << "\t-i <input file>: input 3D volume (string). Either -i or -o (or both) must be specified" << endl;
-    cout << "\t-z <compressed file>: name for the compressed result (string)" << endl;
-    cout << "\t-o <output file>: if specified, the compressed file (-z) will be decompressed to this name (string)" << endl;
+    cout << "\t-c <compressed file>: name for the compressed result (string)" << endl;
+    cout << "\t-o <output file>: if specified, the compressed file (-c) will be decompressed to this name (string)" << endl;
     cout << "\t-v: verbose mode; prints main algorithm steps" << endl;
     cout << "\t-d: print debug information" << endl;
     cout << endl;
@@ -84,9 +84,9 @@ int main(int argc, char* argv[]) {
                     mode = input_mode;
                     input_flag = true;
                     continue;
-                case 'z':
+                case 'c':
                     if (compressed_flag)
-                        display_error("Flag -z already set");
+                        display_error("Flag -c already set");
                     mode = compressed_mode;
                     compressed_flag = true;
                     continue;
@@ -189,13 +189,13 @@ int main(int argc, char* argv[]) {
     }
 
     if (!compressed_flag or compressed_file == "")
-        display_error("Specify a file name for the compressed data set (-z)");
+        display_error("Specify a file name for the compressed data set (-c)");
 
     if (output_flag) {
         if (output_file == "")
             display_error("Specify a valid output file name");
         if (!input_flag and (io_type_flag or sizes_flag or target_value > 1))
-            display_error("Decompression mode only accepts flags -z, -o, -v and -d");
+            display_error("Decompression mode only accepts flags -c, -o, -v and -d");
     }
 
     if (!input_flag and !output_flag)

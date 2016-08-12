@@ -15,24 +15,24 @@ You will need:
 Compression:
 
 ```
-./tthresh -i dataset <options> -z dataset.compressed
+./tthresh -i dataset <options> -c dataset.compressed
 ```
 
 Decompression:
 
 ```
-./tthresh -z dataset.compressed -o dataset.decompressed
+./tthresh -c dataset.compressed -o dataset.decompressed
 ```
 
 Compression + decompression (this will print both the bits per value and the achieved accuracy):
 
 ```
-./tthresh -i dataset <options> -z dataset.compressed -o dataset.decompressed
+./tthresh -i dataset <options> -c dataset.compressed -o dataset.decompressed
 ```
 
 The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info the available options, run ```./tthresh -h```.
 
-For example, ```./tthresh -i bonsai.raw -z bonsai.compressed -o bonsai.decompressed -t uchar -s 256 256 256 -r 2``` yields about 1.95 RMSE and 1:25 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
+For example, ```./tthresh -i bonsai.raw -c bonsai.compressed -o bonsai.decompressed -t uchar -s 256 256 256 -r 2``` yields about 1.95 RMSE and 1:25 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
 
 <img src="https://github.com/rballester/tucker_compression/blob/master/images/original_vs_reconstructed.jpg" width="512">
 
