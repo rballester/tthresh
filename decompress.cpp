@@ -3,7 +3,7 @@
 
 using namespace std;
 
-void decode_factor(double* mem, int s, string file1, string file2, string file3) { // TODO double...
+void decode_factor(double* mem, int s, string file1, string file2, string file3) {
 
     // First, the q for each column
     vector<char> columns_q(s);
@@ -14,7 +14,7 @@ void decode_factor(double* mem, int s, string file1, string file2, string file3)
 
     // Next, the matrix's maximum, used for quantization
     ifstream limits_stream(file2.c_str(), ios::in | ios::binary);
-    double maximum; // Todo...
+    double maximum;
     limits_stream.read(reinterpret_cast<char*>(&maximum),sizeof(double));
     limits_stream.close();
 
@@ -41,7 +41,7 @@ void decode_factor(double* mem, int s, string file1, string file2, string file3)
             }
             char sign = (to_read>>q)&1L;
             to_read &= ~(1L<<q);
-            mem[i] = -(2*sign-1)*double(to_read)*maximum/((1L<<q)-double(1));
+            mem[i] = -(2*sign-1)/((1L<<q)-double(1))*maximum*double(to_read);
         }
     }
     matrix_stream.close();
@@ -51,12 +51,12 @@ void decompress(string compressed_file, string output_file, double* data, bool v
 
     if (verbose) cout << endl << "/***** Decompression *****/" << endl << endl << flush;
 
-    int __ = system("rm tthresh-tmp/*");
+    int _ = system("rm tthresh-tmp/*");
 
     stringstream ss;
     ss << "tar -xf " << compressed_file;
     string command(ss.str());
-    int _ = system(command.c_str());
+    _ = system(command.c_str());
 
     // Read output tensor type
     ifstream io_type_stream("tthresh-tmp/io_type", ios::in | ios::binary );
@@ -112,7 +112,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
                 ind++;
             }
         }
-        if (verbose) cout << "Decoded chunk mask " << chunk_num << ", has " << buffer.size()*8 << " bits, q="
+        if (verbose) cout << "Decoded chunk " << chunk_num << ", mask has " << buffer.size()*8 << " bits, q="
                           << int(qs[chunk_num-1]) << endl << flush;
     }
     chunk_sizes_stream.close();
@@ -130,58 +130,39 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     maximums_stream.close();
 
     // Recover the core
-    double* c = new double[size]; // TODO should be double
+    double* c = new double[size];
     ifstream core_quant_stream("tthresh-tmp/core_quant", ios::in | ios::binary);
-    char core_quant_rbyte;
-    core_quant_stream.read(&core_quant_rbyte,sizeof(char));
+    std::vector<char> core_quant_buffer((istreambuf_iterator<char>(core_quant_stream)), istreambuf_iterator<char>());
+    core_quant_stream.close();
+    int core_quant_rbyte = 0;
     char core_quant_rbit = 7;
-    int shout = 1;
-    int bits_read = 0;
     for (int i = 0; i < size; ++i) {
         int chunk_num = encoding_mask[i];
         double chunk_min = minimums[chunk_num-1];
         double chunk_max = maximums[chunk_num-1];
         char q = qs[chunk_num-1];
-        char sign = 0;
-        if (q > 0) {
-            sign = ((core_quant_rbyte >> core_quant_rbit)&1L);
-//                if (shout < 30)
-//                    cout << int(sign) << " ";
-//                shout++;
-            core_quant_rbit--;
-            bits_read++;
-            if (core_quant_rbit < 0) {
-                core_quant_stream.read(&core_quant_rbyte,sizeof(char));
-                core_quant_rbit = 7;
-            }
-        }
-        long int quant = 0;
-        for (long int j = q-1; j >= 0; --j) {
-            quant |= ((core_quant_rbyte >> core_quant_rbit)&1L) << j;
-//                if (shout < 30)
-//                    cout << int(((core_quant_rbyte >> core_quant_rbit)&1)) << " ";
-//                shout++;
-            core_quant_rbit--;
-            bits_read++;
-            if (core_quant_rbit < 0) {
-                core_quant_stream.read(&core_quant_rbyte,sizeof(char));
-                core_quant_rbit = 7;
-            }
-        }
-        double dequant;
-        if (q == 0)
-            dequant = chunk_min;
-        else
-            dequant = quant*(chunk_max-chunk_min)/((1L<<q)-1.) + chunk_min;
-        c[i] = -(sign*2-1)*dequant;
-//            if (chunk_num == 52) {
-//                cout << "bits read=" << bits_read << ", chunk_num = " << chunk_num << ", sign = " << int(sign) << ", q = " << int(q) << ", chunk_min = " << chunk_min << ", chunk_max = " << chunk_max << ", quant = " << quant << ", dequant = " << dequant << endl;
-//                shout = 0;
-//            }
-    }
 
-//    for (int i = 0; i < 10; ++i)
-//        cout << c[i] << " " << endl;
+        if (q > 0) {
+            char sign = 0;
+            long int quant = 0;
+            for (long int j = q; j >= 0; --j) {
+                if (j == q)
+                    sign = ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1L);
+                else
+                    quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1L) << j;
+                core_quant_rbit--;
+                if (core_quant_rbit < 0) {
+                    core_quant_rbyte++;
+                    core_quant_rbit = 7;
+                }
+            }
+            double dequant;
+            dequant = quant/((1L<<q)-1.)*(chunk_max-chunk_min) + chunk_min;
+            c[i] = -(sign*2-1)*dequant;
+        }
+        else
+            c[i] = 0;
+    }
 
     // Read factor matrices
     if (verbose) cout << "Decoding factor matrices... " << flush;
@@ -191,7 +172,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     decode_factor(U3.get_array(),s[2],"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
     if (verbose) cout << "Done" << endl << flush;
 
-    vmml::tensor<double> core(s[0],s[1],s[2]); // TODO
+    vmml::tensor<double> core(s[0],s[1],s[2]);
     core.set_memory(c);
     if (verbose) cout << "Reconstructing tensor... " << flush;
     vmml::tensor<double> reco = core.ttm(U1,U2,U3);
@@ -204,8 +185,8 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     long int buffer_wpos = 0;
     double sse = 0;
     double input_norm = 0;
-    double input_min = std::numeric_limits<double>::max(); // TODO
-    double input_max = std::numeric_limits<double>::min(); // TODO
+    double input_min = std::numeric_limits<double>::max();
+    double input_max = std::numeric_limits<double>::min();
     for (long int i = 0; i < size; ++i) {
         if (io_type_code == 0)
             reinterpret_cast<unsigned char*>(buffer)[buffer_wpos] = abs(r[i]);
@@ -215,8 +196,6 @@ void decompress(string compressed_file, string output_file, double* data, bool v
             reinterpret_cast<float*>(buffer)[buffer_wpos] = r[i];
         else
             reinterpret_cast<double*>(buffer)[buffer_wpos] = r[i];
-//        if (i < 10)
-//            cout << "i=" << i << ", r[i]=" << r[i] << endl;
         buffer_wpos++;
         if (buffer_wpos == buf_elems) {
             buffer_wpos = 0;

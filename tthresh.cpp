@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     Target target = eps;
     double target_value = -1;
     int s[3] = {-1, -1, -1};
-    int size_index;
+    int size_index = 0;
     bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false,
             sizes_flag = false, target_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
@@ -107,7 +107,6 @@ int main(int argc, char* argv[]) {
                         display_error("The sizes (-s) were already set");
                     mode = sizes_mode;
                     sizes_flag = true;
-                    size_index = 0;
                     continue;
                 case 'e':
                     if (target_flag)
@@ -196,7 +195,7 @@ int main(int argc, char* argv[]) {
         if (output_file == "")
             display_error("Specify a valid output file name");
         if (!input_flag and (io_type_flag or sizes_flag or target_value > 1))
-            display_error("Decompression mode only accepts the input (-z) and output file (-o) flags");
+            display_error("Decompression mode only accepts flags -z, -o, -v and -d");
     }
 
     if (!input_flag and !output_flag)
@@ -213,7 +212,7 @@ int main(int argc, char* argv[]) {
     if (output_flag) {
         decompress(compressed_file,output_file,data,verbose_flag,debug_flag);
     }
-    delete data;
+    delete[] data;
 
     return 0;
 }

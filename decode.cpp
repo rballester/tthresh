@@ -47,7 +47,7 @@ void decode(string input_file, string output_file) {
 	unsigned char write_byte = 0;
     int write_counter = 7;
 	int this_code_len = 0;
-	for (int i = 0; i < compression_size; ++i) {
+    for (int i = 0; i < compression_size; ++i) {
 		char c = compression[i];
 		for (int j = 0; j < 8; ++j) {
             if (read_bits == n_bits)

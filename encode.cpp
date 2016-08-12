@@ -155,15 +155,15 @@ void encode(string input_file, string output_file)
     counter = 0;
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
         int key = (int) (it->first);
-        int cost = it->second.end() - it->second.begin();
+        int cost = it->second.size();
         key_array[counter] = key;
         unsigned int encoding = 0;
-        for (int i = 0; i < it->second.size(); ++i)
-            encoding |= it->second[i] * (1 << (it->second.size() - 1 - i));
-        if (encoding >= 1 << 24) {
+        if (it->second.size() >= 24) {
             cout << "Encoding too large" << endl;
             exit(1);
         }
+        for (int i = 0; i < it->second.size(); ++i)
+            encoding |= it->second[i] * (1 << (it->second.size() - 1 - i));
         encoding |= (it->second.size() << 24);
         code_array[counter] = encoding;
         n_bits += cost * frequencies[key];

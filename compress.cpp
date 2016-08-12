@@ -5,7 +5,7 @@
 
 using namespace std;
 
-void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, string file2, string file3) { // TODO double...
+void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, string file2, string file3) {
 
     // First, the q for each column
     ofstream columns_q_stream(file1.c_str(), ios::out | ios::binary);
@@ -15,7 +15,7 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
 
     // Next, the matrix's maximum, used for quantization
     ofstream limits_stream(file2.c_str(), ios::out | ios::binary);
-    double maximum = std::numeric_limits<double>::min(); // Todo...
+    double maximum = std::numeric_limits<double>::min();
     for (int i = 0; i < s*s; ++i)
         maximum = max(maximum,abs(mem[i]));
     limits_stream.write(reinterpret_cast<char*>(&maximum),sizeof(double));
@@ -30,8 +30,8 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
         char q = columns_q[column];
         if (q > 0) {
             q += 2; // Seems a good compromise
-            unsigned long int to_write = roundl(abs(mem[i])*((1L<<q)-1)/maximum);
-            to_write |= (mem[i]<0)*(1L<<q);
+            unsigned long int to_write = min(((1L<<q)-1),(long int)roundl(abs(mem[i])/maximum*((1L<<q)-1)));
+            to_write |= (mem[i]<0)*(1L<<q); // The sign
             for (long int j = q; j >= 0; --j) {
                 matrix_wbyte |= ((to_write>>j)&1L) << matrix_wbit;
                 matrix_wbit--;
@@ -53,7 +53,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
 
     if (verbose) cout << endl << "/***** Compression *****/" << endl << endl << flush;
 
-    int __ = system("rm -f tthresh-tmp/*");
+    int _ = system("mkdir -p tthresh-tmp/");
+    _ = system("rm -f tthresh-tmp/*");
 
     /**************************/
     // Read the input data file
@@ -90,7 +91,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     in_stream.seekg(0, ios::beg);
     in_stream.read(in,size*type_size);
     in_stream.close();
-    double* data; // TODO change to double
+    double* data;
     if (io_type == "double") {
         data = (double *)in;
     }
@@ -108,7 +109,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             for (int i = 0; i < size; ++i)
                 data[i] = *reinterpret_cast<float *>(&in[i*type_size]);
         }
-        delete in;
+        delete[] in;
     }
 
     /*********************************/
@@ -140,7 +141,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     else
         sse = pow((X.maximum()-X.minimum()) / (2*(pow(10,target_value/20))),2) * size;
     double lim = sse/size;
-    if (debug) cout << "We target SSE=" << lim << endl;
+    if (debug) cout << "We target MSE=" << lim << endl;
 
     /***********************************/
     // Sort abs(core) in ascending order
@@ -176,7 +177,6 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     vector<char> U3_q(s[2],0);
 
     while (left < size) {
-        bool we_just_reduced = false;
         while (left < size) {
             right = min(size,old_right+adder);
             double chunk_min = sorting[left].first;
@@ -195,17 +195,16 @@ double* compress(string input_file, string compressed_file, string io_type, int 
                         sse += (sorting[i].first-chunk_min)*(sorting[i].first-chunk_min);
                 }
             }
-            double msse = sse/(right-left);
-            if (debug) cout << "We try [" << left << "," << right << "), adder = " << adder << ", msse = " << msse << endl;
-            if (msse >= 0.9*lim or right == size) {
-                if (msse >= lim) {
+            double mse = sse/(right-left);
+            if (debug) cout << "We try [" << left << "," << right << "), adder = " << adder << ", mse = " << mse << endl;
+            if (mse >= 0.9*lim or right == size) {
+                if (mse >= lim) {
                     if (adder > 1) {
                         adder = ceil(adder/4.);
-                        we_just_reduced = true;
                         continue;
                     }
                     else {
-                        right--;
+                        right = old_right;
                         break;
                     }
                 }
@@ -214,34 +213,31 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             }
             else {
                 old_right = right;
-                if (we_just_reduced)
-                    we_just_reduced = false;
-                else
-                    adder *= 2;
+                adder *= 2;
             }
         }
-
-        /********************************************/
-        // Fill the core buffer with quantized values
-        /********************************************/
 
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right-1].first;
         int chunk_size = (right-left);
         chunk_sizes_stream.write(reinterpret_cast<char*>( &chunk_size ),sizeof(int));
         minimums_stream.write(reinterpret_cast<char*>( &chunk_min ),sizeof(double));
-        maximums_stream.write(reinterpret_cast<char*>( &chunk_max ),sizeof(double)); // TODO not if q = 0
+        maximums_stream.write(reinterpret_cast<char*>( &chunk_max ),sizeof(double)); // TODO not needed if q = 0
         qs_stream.write(reinterpret_cast<char*>( &q ),sizeof(char));
         qs_vec.push_back(q);
+
+        /********************************************/
+        // Fill the core buffer with quantized values
+        /********************************************/
+
         if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
             for (int i = left; i < right; ++i) {
-                unsigned long int to_write;
-                if (right-left == 1)
-                    to_write = 0; // TODO not needed...
-                else
-                    to_write = roundl((sorting[i].first-chunk_min)*((1L<<q)-1)/(chunk_max-chunk_min));
+                unsigned long int to_write = 0;
+                if (right-left > 1)
+                    // The following min() prevents overflowing the q-bit representation when converting double -> long int
+                    to_write = min(((1L<<q)-1),(long int)roundl((sorting[i].first-chunk_min)/(chunk_max-chunk_min)*((1L<<q)-1)));
                 to_write |= (c[sorting[i].second]<0)*(1L<<q);
-                core_to_write[sorting[i].second] = to_write; // TODO copy into c[] directly
+                core_to_write[sorting[i].second] = to_write; // TODO copy into c[] directly?
             }
         }
 
@@ -282,13 +278,15 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         stringstream ss;
         ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
         encode("tthresh-tmp/mask.raw",ss.str());
-        if (debug) {
-            decode("tthresh-tmp/mask.compressed","tthresh-tmp/mask.decompressed");
+        if (debug) { // Check RLE+Huffman correctness
+            decode(ss.str(),"tthresh-tmp/mask.decompressed");
             if (system("diff tthresh-tmp/mask.raw tthresh-tmp/mask.decompressed") != 0) {
                 cout << "Huffman error" << endl;
                 exit(1);
             }
+            remove("tthresh-tmp/mask.decompressed");
         }
+        remove("tthresh-tmp/mask.raw");
         if (verbose) {
             int coeff_bits = 0;
             if (q > 0)
@@ -297,17 +295,13 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             std::ifstream in(ss_str.c_str(), std::ifstream::ate | std::ifstream::binary);
             int huffman_bits = in.tellg()*8;
             in.close();
-            cout << "Encoded " << chunk_num << " accepted, min=" << chunk_min << ", max=" << chunk_max
+            cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max
                 << ", cbits=" << coeff_bits << ", hbits=" << huffman_bits << ", q=" << int(q) << ", bits=["
                 << left << "," << right << "), size=" << right-left << endl << flush;
         }
 
         // Update control variables
-        q++;
-        if (q >= 64) {
-            cout << "q grew too much" << endl;
-            exit(1);
-        }
+        if (q < 63) q++;
         left = right;
         old_right = left;
         chunk_num++;
@@ -343,7 +337,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     if (core_quant_wbit < 7)
         core_quant_stream.write(&core_quant_wbyte,sizeof(char));
     core_quant_stream.close();
-    delete core_to_write;
+    delete[] core_to_write;
     if (verbose) cout << "Done" << endl << flush;
 
     /****************************/
@@ -370,6 +364,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     /*********************************/
 
     if (debug) {
+        cout << "q's for the factor columns: " << endl;
         for (int i = 0; i < s[0]; ++i)
             cout << " " << int(U1_q[i]);
         cout << endl;
@@ -400,7 +395,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         streampos beginning = bpv_stream.tellg();
         bpv_stream.seekg( 0, ios::end );
         long int newbits = (bpv_stream.tellg() - beginning)*8;
-        cout << "oldbits = " << size*type_size*8 << ", newbits = " << newbits << ", compressionrate = " << size*type_size*8/double(newbits)
+        cout << "oldbits = " << size*type_size*8L << ", newbits = " << newbits << ", compressionrate = " << size*type_size*8L/double(newbits)
                 << ", bpv = " << newbits/double(size) << endl << flush;
         bpv_stream.close();
     }
