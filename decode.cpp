@@ -84,6 +84,6 @@ void decode(string input_file, string output_file) {
     output.close();
 
     for (int i = 0; i < 24; ++i)
-        delete table[i];
+        delete[] table[i];
 
 }

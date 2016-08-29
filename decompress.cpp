@@ -174,6 +174,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
 
     vmml::tensor<double> core(s[0],s[1],s[2]);
     core.set_memory(c);
+    delete[] c;
     if (verbose) cout << "Reconstructing tensor... " << flush;
     vmml::tensor<double> reco = core.ttm(U1,U2,U3);
     if (verbose) cout << "Done" << endl << flush;
@@ -210,6 +211,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     }
     if (buffer_wpos > 0)
         output_stream.write(buffer,io_type_size*buffer_wpos);
+    delete[] buffer;
     output_stream.close();
     if (debug) reco.debug();
 

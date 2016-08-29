@@ -250,7 +250,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             encoding_mask[index] = chunk_num;
             // We use this loop also to store the needed quantization bits per factor column
             int x = index%s[0];
-            int y = index%(s[0]*s[1])/s[1];
+            int y = index%(s[0]*s[1])/s[0];
+//            cout << "index = " << index << ", size = " << size << ", s[1] = " << s[1] << ", y = " << y << endl;
             int z = index/(s[0]*s[1]);
             U1_q[x] = max(U1_q[x],q);
             U2_q[y] = max(U2_q[y],q);
