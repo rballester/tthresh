@@ -29,19 +29,19 @@ void decode_factor(double* mem, int s, string file1, string file2, string file3)
         if (q == 0)
             mem[i] = 0;
         else {
-            q += 2;
+            q = min(63,q+2);
             unsigned long int to_read = 0;
             for (int j = q; j >= 0; --j) {
-                to_read |= ((matrix_rbyte>>matrix_rbit)&1L) << j;
+                to_read |= ((matrix_rbyte>>matrix_rbit)&1UL) << j;
                 matrix_rbit--;
                 if (matrix_rbit < 0) {
                     matrix_rbit = 7;
                     matrix_stream.read(&matrix_rbyte,sizeof(char));
                 }
             }
-            char sign = (to_read>>q)&1L;
-            to_read &= ~(1L<<q);
-            mem[i] = -(2*sign-1)/((1L<<q)-double(1))*maximum*double(to_read);
+            char sign = (to_read>>q)&1UL;
+            to_read &= ~(1UL<<q);
+            mem[i] = -(2*sign-1)/((1UL<<q)-double(1))*maximum*double(to_read);
         }
     }
     matrix_stream.close();
@@ -144,21 +144,25 @@ void decompress(string compressed_file, string output_file, double* data, bool v
 
         if (q > 0) {
             char sign = 0;
-            long int quant = 0;
+            unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) {
-                if (j == q)
-                    sign = ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1L);
+                if (j == q and q < 63)
+                    sign = ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1UL);
                 else
-                    quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1L) << j;
+                    quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit)&1UL) << j;
                 core_quant_rbit--;
                 if (core_quant_rbit < 0) {
                     core_quant_rbyte++;
                     core_quant_rbit = 7;
                 }
             }
-            double dequant;
-            dequant = quant/((1L<<q)-1.)*(chunk_max-chunk_min) + chunk_min;
-            c[i] = -(sign*2-1)*dequant;
+            if (q == 63)
+                c[i] = *reinterpret_cast<double*>(&quant);
+            else {
+                double dequant;
+                dequant = quant/((1UL<<q)-1.)*(chunk_max-chunk_min) + chunk_min;
+                c[i] = -(sign*2-1)*dequant;
+            }
         }
         else
             c[i] = 0;

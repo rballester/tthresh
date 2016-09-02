@@ -29,11 +29,11 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
         int column = i/s;
         char q = columns_q[column];
         if (q > 0) {
-            q += 2; // Seems a good compromise
-            unsigned long int to_write = min(((1L<<q)-1),(long int)roundl(abs(mem[i])/maximum*((1L<<q)-1)));
-            to_write |= (mem[i]<0)*(1L<<q); // The sign
+            q = min(63,q+2); // Seems a good compromise
+            unsigned long int to_write = min(((1UL<<q)-1),(unsigned long int)roundl(abs(mem[i])/maximum*((1UL<<q)-1)));
+            to_write |= (mem[i]<0)*(1UL<<q); // The sign
             for (long int j = q; j >= 0; --j) {
-                matrix_wbyte |= ((to_write>>j)&1L) << matrix_wbit;
+                matrix_wbyte |= ((to_write>>j)&1UL) << matrix_wbit;
                 matrix_wbit--;
                 if (matrix_wbit < 0) {
                     matrix_wbit = 7;
@@ -46,7 +46,7 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
     if (matrix_wbit < 7)
         matrix_stream.write(&matrix_wbyte,sizeof(char));
     matrix_stream.close();
-    string file3_rle = file3+".compressed";
+//    string file3_rle = file3+".compressed";
 }
 
 double* compress(string input_file, string compressed_file, string io_type, int s[3], Target target, double target_value, bool verbose, bool debug) {
@@ -177,7 +177,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     vector<char> U3_q(s[2],0);
 
     while (left < size) {
-        while (left < size) {
+        while (left < size and q < 63) {
             right = min(size,old_right+adder);
             double chunk_min = sorting[left].first;
             double chunk_max = sorting[right-1].first;
@@ -185,8 +185,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             if (right > left+1) {
                 if (q > 0) {
                     for (int i = left; i < right; ++i) {
-                        long int quant = roundl((sorting[i].first-chunk_min)*((1L<<q)-1.)/(chunk_max-chunk_min));
-                        double dequant = quant*(chunk_max-chunk_min)/((1L<<q)-1.) + chunk_min;
+                        long int quant = roundl((sorting[i].first-chunk_min)*((1UL<<q)-1.)/(chunk_max-chunk_min));
+                        double dequant = quant*(chunk_max-chunk_min)/((1UL<<q)-1.) + chunk_min;
                         sse += (sorting[i].first-dequant)*(sorting[i].first-dequant);
                     }
                 }
@@ -217,6 +217,9 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             }
         }
 
+        if (q == 63)
+            right = size;
+
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right-1].first;
         int chunk_size = (right-left);
@@ -230,13 +233,18 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         // Fill the core buffer with quantized values
         /********************************************/
 
-        if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
-            for (int i = left; i < right; ++i) {
+        for (int i = left; i < right; ++i) {
+            if (q == 63) { // Remaining values will need 64 bits. So let's copy the value verbatim and forget quantization
+                core_to_write[sorting[i].second] = *reinterpret_cast<unsigned long int*>(&c[sorting[i].second]);
+                double reco;
+                reco = *reinterpret_cast<double*>(&core_to_write[sorting[i].second]);
+            }
+            else if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
                 unsigned long int to_write = 0;
-                if (right-left > 1)
+                if (chunk_size > 1)
                     // The following min() prevents overflowing the q-bit representation when converting double -> long int
-                    to_write = min(((1L<<q)-1),(long int)roundl((sorting[i].first-chunk_min)/(chunk_max-chunk_min)*((1L<<q)-1)));
-                to_write |= (c[sorting[i].second]<0)*(1L<<q);
+                    to_write = min(((1UL<<q)-1),(unsigned long int)roundl((sorting[i].first-chunk_min)/(chunk_max-chunk_min)*((1UL<<q)-1)));
+                to_write |= (c[sorting[i].second]<0)*(1UL<<q);
                 core_to_write[sorting[i].second] = to_write; // TODO copy into c[] directly?
             }
         }
@@ -251,12 +259,12 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             // We use this loop also to store the needed quantization bits per factor column
             int x = index%s[0];
             int y = index%(s[0]*s[1])/s[0];
-//            cout << "index = " << index << ", size = " << size << ", s[1] = " << s[1] << ", y = " << y << endl;
             int z = index/(s[0]*s[1]);
             U1_q[x] = max(U1_q[x],q);
             U2_q[y] = max(U2_q[y],q);
             U3_q[z] = max(U3_q[z],q);
         }
+
         ofstream mask("tthresh-tmp/mask.raw", ios::out | ios::binary);
         char mask_wbyte = 0;
         char mask_wbit = 7;
@@ -302,11 +310,12 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         }
 
         // Update control variables
-        if (q < 63) q++;
+        q++;
         left = right;
         old_right = left;
         chunk_num++;
     }
+
     chunk_sizes_stream.close();
     minimums_stream.close();
     maximums_stream.close();
@@ -325,7 +334,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         char q = qs_vec[chunk_num-1];
         if (q > 0) {
             for (long int j = q; j >= 0; --j) {
-                core_quant_wbyte |= ((core_to_write[i] >> j)&1L) << core_quant_wbit;
+                core_quant_wbyte |= ((core_to_write[i] >> j)&1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
                     core_quant_stream.write(&core_quant_wbyte,sizeof(char));
