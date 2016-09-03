@@ -102,7 +102,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
         ifstream mask("tthresh-tmp/mask.decompressed", ios::in | ios::binary);
         std::vector<char> buffer((istreambuf_iterator<char>(mask)), istreambuf_iterator<char>());
         long int ind = 0;
-        for (int i = 0; i < buffer.size() and ind < size; ++i) { // This can be more efficient...
+        for (unsigned int i = 0; i < buffer.size() and ind < size; ++i) { // This can be more efficient...
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (encoding_mask[ind] > 0)
                     ind++;
@@ -157,7 +157,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
                 }
             }
             if (q == 63)
-                c[i] = *reinterpret_cast<double*>(&quant);
+                c[i] = static_cast<double>(quant);
             else {
                 double dequant;
                 dequant = quant/((1UL<<q)-1.)*(chunk_max-chunk_min) + chunk_min;

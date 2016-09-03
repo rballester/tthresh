@@ -113,7 +113,7 @@ void encode(string input_file, string output_file)
     int counter = -1;
     vector<int> counters;
     std::map<int, int> frequencies;
-    for (int i = 0; i < contents.size(); ++i) {
+    for (unsigned int i = 0; i < contents.size(); ++i) {
         char c = contents[i];
         for (int j = 7; j >= 0; --j) {
             char bit = (c >> j)&1;
@@ -162,7 +162,7 @@ void encode(string input_file, string output_file)
             cout << "Encoding too large" << endl;
             exit(1);
         }
-        for (int i = 0; i < it->second.size(); ++i)
+        for (unsigned int i = 0; i < it->second.size(); ++i)
             encoding |= it->second[i] * (1 << (it->second.size() - 1 - i));
         encoding |= (it->second.size() << 24);
         code_array[counter] = encoding;
@@ -185,8 +185,8 @@ void encode(string input_file, string output_file)
     vector < char > translation;
     char translation_wbyte = 0;
     char translation_wbit = 7;
-    for (int i = 0; i < counters.size(); ++i) {
-        for (int j = 0; j < codes[counters[i]].size(); ++j) {
+    for (unsigned int i = 0; i < counters.size(); ++i) {
+        for (unsigned int j = 0; j < codes[counters[i]].size(); ++j) {
             translation_wbyte |= codes[counters[i]][j] << translation_wbit;
             translation_wbit--;
             if (translation_wbit < 0) {

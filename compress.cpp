@@ -99,15 +99,15 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         data = new double[size];
         if (io_type == "uchar") {
             for (int i = 0; i < size; ++i)
-                data[i] = *reinterpret_cast<unsigned char *>(&in[i*type_size]);
+                data[i] = static_cast<unsigned char>(in[i*type_size]);
         }
         else if (io_type == "int") {
             for (int i = 0; i < size; ++i)
-                data[i] = *reinterpret_cast<int *>(&in[i*type_size]);
+                data[i] = static_cast<int>(in[i*type_size]);
         }
         else {
             for (int i = 0; i < size; ++i)
-                data[i] = *reinterpret_cast<float *>(&in[i*type_size]);
+                data[i] = static_cast<float>(in[i*type_size]);
         }
         delete[] in;
     }
@@ -163,7 +163,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     char q = 0;
     int left = 0;
     int old_right = left;
-    int right;
+    int right = left;
     ofstream chunk_sizes_stream("tthresh-tmp/chunk_sizes", ios::out | ios::binary);
     ofstream minimums_stream("tthresh-tmp/minimums", ios::out | ios::binary);
     ofstream maximums_stream("tthresh-tmp/maximums", ios::out | ios::binary);
@@ -234,11 +234,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         /********************************************/
 
         for (int i = left; i < right; ++i) {
-            if (q == 63) { // Remaining values will need 64 bits. So let's copy the value verbatim and forget quantization
-                core_to_write[sorting[i].second] = *reinterpret_cast<unsigned long int*>(&c[sorting[i].second]);
-                double reco;
-                reco = *reinterpret_cast<double*>(&core_to_write[sorting[i].second]);
-            }
+            if (q == 63) // Remaining values will need 64 bits. So let's copy the value verbatim and forget quantization
+                core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
             else if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
                 unsigned long int to_write = 0;
                 if (chunk_size > 1)
