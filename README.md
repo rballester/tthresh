@@ -1,13 +1,24 @@
 # tthresh
+
 ##C++ volume compression using the Tucker tensor decomposition##
 
 This is an improved implementation evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
+
+### Compilation
+
+Use CMake to generate an executable ```build/tthresh```:
+
+```  
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+```
 
 ### Requirements
 
 You will need:
 
-- CBLAS and CLAPACK (link them during compilation, e.g. ```g++ -O3 tthresh.cpp -llapack -lblas -lm -o tthresh```)
+- Eigen (if you do ```git clone --recursive```, it will be downloaded as a submodule)
 - tar and gzip (this is used to pack everything together into one final compressed file)
 
 ### Usage

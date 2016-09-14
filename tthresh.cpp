@@ -5,11 +5,11 @@
 #include <iomanip>
 #include <stdlib.h>
 #include <typeinfo>
-#include "encode.cpp"
-#include "decode.cpp"
+#include "encode.hpp"
+#include "decode.hpp"
 #include "tthresh.hpp"
-#include "compress.cpp"
-#include "decompress.cpp"
+#include "compress.hpp"
+#include "decompress.hpp"
 
 using namespace std;
 
