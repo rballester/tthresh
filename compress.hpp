@@ -2,12 +2,12 @@
 #include <vector>
 #include "tthresh.hpp"
 #include "tucker.hpp"
-#include <Eigen/Eigenvalues>
+#include <Eigen/Dense>
 
 using namespace std;
 using namespace Eigen;
 
-void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, string file2, string file3) {
+void encode_factor(MatrixXd& U, int s, vector<char>& columns_q, string file1, string file2, string file3) {
 
     // First, the q for each column
     ofstream columns_q_stream(file1.c_str(), ios::out | ios::binary);
@@ -17,9 +17,7 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
 
     // Next, the matrix's maximum, used for quantization
     ofstream limits_stream(file2.c_str(), ios::out | ios::binary);
-    double maximum = std::numeric_limits<double>::min();
-    for (int i = 0; i < s*s; ++i)
-        maximum = max(maximum,abs(mem[i]));
+    double maximum = U.maxCoeff();
     limits_stream.write(reinterpret_cast<char*>(&maximum),sizeof(double));
     limits_stream.close();
 
@@ -27,20 +25,21 @@ void encode_factor(double* mem, int s, vector<char>& columns_q, string file1, st
     ofstream matrix_stream(file3.c_str(), ios::out | ios::binary);
     char matrix_wbyte = 0;
     char matrix_wbit = 7;
-    for (int i = 0; i < s*s; ++i) {
-        int column = i/s;
-        char q = columns_q[column];
-        if (q > 0) {
-            q = min(63,q+2); // Seems a good compromise
-            unsigned long int to_write = min(((1UL<<q)-1),(unsigned long int)roundl(abs(mem[i])/maximum*((1UL<<q)-1)));
-            to_write |= (mem[i]<0)*(1UL<<q); // The sign
-            for (long int j = q; j >= 0; --j) {
-                matrix_wbyte |= ((to_write>>j)&1UL) << matrix_wbit;
-                matrix_wbit--;
-                if (matrix_wbit < 0) {
-                    matrix_wbit = 7;
-                    matrix_stream.write(&matrix_wbyte,sizeof(char));
-                    matrix_wbyte = 0;
+    for (int j = 0; j < s; ++j) {
+        for (int i = 0; i < s; ++i) {
+            char q = columns_q[j];
+            if (q > 0) {
+                q = min(63,q+2); // Seems a good compromise
+                unsigned long int to_write = min(((1UL<<q)-1),(unsigned long int)roundl(abs(U(i,j))/maximum*((1UL<<q)-1)));
+                to_write |= (U(i,j)<0)*(1UL<<q); // The sign is the first bit to write
+                for (long int j = q; j >= 0; --j) {
+                    matrix_wbyte |= ((to_write>>j)&1UL) << matrix_wbit;
+                    matrix_wbit--;
+                    if (matrix_wbit < 0) {
+                        matrix_wbit = 7;
+                        matrix_stream.write(&matrix_wbyte,sizeof(char));
+                        matrix_wbyte = 0;
+                    }
                 }
             }
         }
@@ -378,9 +377,9 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     }
 
     if (verbose) cout << "Encoding factor matrices... " << flush;
-    encode_factor(U1.data(),s[0],U1_q,"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
-    encode_factor(U2.data(),s[1],U2_q,"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
-    encode_factor(U3.data(),s[2],U3_q,"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
+    encode_factor(U1,s[0],U1_q,"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
+    encode_factor(U2,s[1],U2_q,"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
+    encode_factor(U3,s[2],U3_q,"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
     if (verbose) cout << "Done" << endl << flush;
 
     /***********************************************/

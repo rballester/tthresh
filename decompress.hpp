@@ -1,10 +1,11 @@
 #include "tthresh.hpp"
 #include "tucker.hpp"
+#include <Eigen/Dense>
 
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(double* mem, int s, string file1, string file2, string file3) {
+void decode_factor(MatrixXd& U, int s, string file1, string file2, string file3) {
 
     // First, the q for each column
     vector<char> columns_q(s);
@@ -24,25 +25,26 @@ void decode_factor(double* mem, int s, string file1, string file2, string file3)
     char matrix_rbyte;
     matrix_stream.read(&matrix_rbyte,sizeof(char));
     char matrix_rbit = 7;
-    for (int i = 0; i < s*s; ++i) {
-        int column = i/s;
-        char q = columns_q[column];
-        if (q == 0)
-            mem[i] = 0;
-        else {
-            q = min(63,q+2);
-            unsigned long int to_read = 0;
-            for (int j = q; j >= 0; --j) {
-                to_read |= ((matrix_rbyte>>matrix_rbit)&1UL) << j;
-                matrix_rbit--;
-                if (matrix_rbit < 0) {
-                    matrix_rbit = 7;
-                    matrix_stream.read(&matrix_rbyte,sizeof(char));
+    for (int j = 0; j < s; ++j) {
+        for (int i = 0; i < s; ++i) {
+            char q = columns_q[j];
+            if (q == 0)
+                U(i,j) = 0;
+            else {
+                q = min(63,q+2);
+                unsigned long int to_read = 0;
+                for (int j = q; j >= 0; --j) {
+                    to_read |= ((matrix_rbyte>>matrix_rbit)&1UL) << j;
+                    matrix_rbit--;
+                    if (matrix_rbit < 0) {
+                        matrix_rbit = 7;
+                        matrix_stream.read(&matrix_rbyte,sizeof(char));
+                    }
                 }
+                char sign = (to_read>>q)&1UL;
+                to_read &= ~(1UL<<q);
+                U(i,j) = -(2*sign-1)/((1UL<<q)-double(1))*maximum*double(to_read);
             }
-            char sign = (to_read>>q)&1UL;
-            to_read &= ~(1UL<<q);
-            mem[i] = -(2*sign-1)/((1UL<<q)-double(1))*maximum*double(to_read);
         }
     }
     matrix_stream.close();
@@ -172,9 +174,9 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     // Read factor matrices
     if (verbose) cout << "Decoding factor matrices... " << flush;
     MatrixXd U1(s[0],s[0]), U2(s[1],s[1]), U3(s[2],s[2]);
-    decode_factor(U1.data(),s[0],"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
-    decode_factor(U2.data(),s[1],"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
-    decode_factor(U3.data(),s[2],"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
+    decode_factor(U1,s[0],"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
+    decode_factor(U2,s[1],"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
+    decode_factor(U3,s[2],"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
     if (verbose) cout << "Done" << endl << flush;
 
     if (verbose) cout << "Reconstructing tensor... " << flush;
