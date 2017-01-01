@@ -62,42 +62,48 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     _ = system(command.c_str());
 
     // Read output tensor type
-    ifstream io_type_stream("tthresh-tmp/io_type", ios::in | ios::binary );
-    char io_type_code;
-    io_type_stream.read(&io_type_code,sizeof(char));
-    io_type_stream.close();
-    char io_type_size;
-    if (io_type_code == 0) io_type_size = sizeof(char);
-    else if (io_type_code == 1) io_type_size = sizeof(int);
-    else if (io_type_code == 2) io_type_size = sizeof(float);
-    else io_type_size = sizeof(double);
-
-    // Read tensor sizes
-    ifstream sizes_stream("tthresh-tmp/sizes", ios::in | ios::binary );
+    ifstream all_stream("tthresh-tmp/all", ios::in | ios::binary );
     int s[3];
-    sizes_stream.read(reinterpret_cast<char*>(s),3*sizeof(int));
+    all_stream.read(reinterpret_cast<char*>(s),3*sizeof(int));
     long int size = s[0]*s[1]*s[2];
-    sizes_stream.close();
+    
+    char io_type_code;
+    all_stream.read(reinterpret_cast<char*>(&io_type_code),sizeof(char));
+    char io_type_size;
+    if (io_type_code == 0) io_type_size = 1;
+    else if (io_type_code == 1) io_type_size = 4;
+    else if (io_type_code == 2) io_type_size = 4;
+    else io_type_size = 8;
+    unsigned char n_chunks;
+    all_stream.read(reinterpret_cast<char*>(&n_chunks),sizeof(char));
+    all_stream.close();
+
+    //cout << "****" << endl;
+    //cout << s[0] << " " << s[1] << " " << s[2] << endl;
+    //cout << int(io_type_size) << endl;
+    // Read tensor sizes
+    //ifstream sizes_stream("tthresh-tmp/sizes", ios::in | ios::binary );
+    //sizes_stream.close();
 
     // Read chunk encodings and condense them into one array
-    ifstream chunk_sizes_stream("tthresh-tmp/chunk_sizes", ios::in | ios::binary);
-    streampos fsize = chunk_sizes_stream.tellg();
-    chunk_sizes_stream.seekg( 0, ios::end );
-    fsize = chunk_sizes_stream.tellg() - fsize;
-    chunk_sizes_stream.seekg( 0, ios::beg );
-    int n_chunks = fsize/4;
-
-    // Read q's
-    char qs[n_chunks];
-    ifstream qs_stream("tthresh-tmp/qs", ios::in | ios::binary);
-    qs_stream.read(reinterpret_cast<char*>(qs),n_chunks*sizeof(char));
-    qs_stream.close();
+    //ifstream chunk_sizes_stream("tthresh-tmp/chunk_sizes", ios::in | ios::binary);
+    //streampos fsize = chunk_sizes_stream.tellg();
+    //chunk_sizes_stream.seekg( 0, ios::end );
+    //fsize = chunk_sizes_stream.tellg() - fsize;
+    //chunk_sizes_stream.seekg( 0, ios::beg );
+    //int n_chunks = fsize/4;
+    
+    ifstream chunk_info_stream("tthresh-tmp/chunk_info", ios::in | ios::binary);
+    double minimums[n_chunks];
+    double maximums[n_chunks];
 
     vector<int> encoding_mask(size,0);
     for (int chunk_num = 1; chunk_num <= n_chunks; ++chunk_num) {
 
-        int chunk_size;
-        chunk_sizes_stream.read((char*)(&chunk_size),sizeof(int));
+        chunk_info ci;
+        chunk_info_stream.read(reinterpret_cast<char*>(&ci),sizeof(chunk_info));
+	minimums[chunk_num-1] = ci.minimum;
+	maximums[chunk_num-1] = ci.maximum;
 
         stringstream ss;
         ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
@@ -116,21 +122,21 @@ void decompress(string compressed_file, string output_file, double* data, bool v
             }
         }
         if (verbose) cout << "Decoded chunk " << chunk_num << ", mask has " << buffer.size()*8 << " bits, q="
-                          << int(qs[chunk_num-1]) << endl << flush;
+                          << int(chunk_num-1) << endl << flush;
     }
-    chunk_sizes_stream.close();
+    //chunk_sizes_stream.close();
 
     // Read minimums
-    double minimums[n_chunks];
-    ifstream minimums_stream("tthresh-tmp/minimums", ios::in | ios::binary);
-    minimums_stream.read(reinterpret_cast<char*>(minimums),n_chunks*sizeof(double));
-    minimums_stream.close();
+//    double minimums[n_chunks];
+    //ifstream minimums_stream("tthresh-tmp/minimums", ios::in | ios::binary);
+    //minimums_stream.read(reinterpret_cast<char*>(minimums),n_chunks*sizeof(double));
+    //minimums_stream.close();
 
     // Read maximums
-    double maximums[n_chunks];
-    ifstream maximums_stream("tthresh-tmp/maximums", ios::in | ios::binary);
-    maximums_stream.read(reinterpret_cast<char*>(maximums),n_chunks*sizeof(double));
-    maximums_stream.close();
+    //double maximums[n_chunks];
+    //ifstream maximums_stream("tthresh-tmp/maximums", ios::in | ios::binary);
+    //maximums_stream.read(reinterpret_cast<char*>(maximums),n_chunks*sizeof(double));
+    //maximums_stream.close();
 
     // Recover the core
     double* c = new double[size];
@@ -143,7 +149,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
         int chunk_num = encoding_mask[i];
         double chunk_min = minimums[chunk_num-1];
         double chunk_max = maximums[chunk_num-1];
-        char q = qs[chunk_num-1];
+        char q = chunk_num-1;
 
         if (q > 0) {
             char sign = 0;

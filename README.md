@@ -4,11 +4,17 @@
 
 This is an improved implementation evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
 
+### Download
+
+```  
+git clone --recursive https://github.com/rballester/tthresh.git
+```
+
 ### Compilation
 
 Use CMake to generate an executable ```build/tthresh```:
 
-```  
+```
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
@@ -18,7 +24,7 @@ make
 
 You will need:
 
-- Eigen (if you do ```git clone --recursive```, it will be downloaded as a submodule)
+- Eigen (it will be downloaded as a submodule)
 - tar and gzip (this is used to pack everything together into one final compressed file)
 
 ### Usage
@@ -45,7 +51,7 @@ The target accuracy can be specified either as **relative error**, **RMSE** or *
 
 For example, ```./tthresh -i bonsai.raw -c bonsai.compressed -o bonsai.decompressed -t uchar -s 256 256 256 -r 2``` yields about 1.95 RMSE and 1:25 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
 
-<img src="https://github.com/rballester/tucker_compression/blob/master/images/original_vs_reconstructed.jpg" width="512">
+<img src="https://github.com/rballester/tthresh/tree/master/images/original_vs_reconstructed.png" width="512">
 
 You are free to **use and modify** the code as long as you mention the origin. If you use it for a publication, **please cite the paper**:
 
