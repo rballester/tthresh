@@ -5,26 +5,20 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd& U, int s, string file1, string file2, string file3) {
+void decode_factor(MatrixXd& U, int s, ifstream& matrix_info_stream) {
 
-    // First, the q for each column
-    vector<char> columns_q(s);
-    ifstream columns_q_stream(file1.c_str(), ios::in | ios::binary);
-    for (int i = 0; i < s; ++i)
-        columns_q_stream.read(&columns_q[i],sizeof(char));
-    columns_q_stream.close();
-
-    // Next, the matrix's maximum, used for quantization
-    ifstream limits_stream(file2.c_str(), ios::in | ios::binary);
+    // First, the matrix's maximum, used for quantization
     double maximum;
-    limits_stream.read(reinterpret_cast<char*>(&maximum),sizeof(double));
-    limits_stream.close();
+    matrix_info_stream.read(reinterpret_cast<char*>(&maximum),sizeof(double));
+    
+    // Next, the q for each column
+    vector<char> columns_q(s);
+    for (int i = 0; i < s; ++i)
+        matrix_info_stream.read(&columns_q[i],sizeof(char));
 
     // Finally we dequantize the matrix itself
-    ifstream matrix_stream(file3.c_str(), ios::in | ios::binary);
     char matrix_rbyte;
-    matrix_stream.read(&matrix_rbyte,sizeof(char));
-    char matrix_rbit = 7;
+    char matrix_rbit = -1;
     for (int j = 0; j < s; ++j) {
         for (int i = 0; i < s; ++i) {
             char q = columns_q[j];
@@ -34,12 +28,12 @@ void decode_factor(MatrixXd& U, int s, string file1, string file2, string file3)
                 q = min(63,q+2);
                 unsigned long int to_read = 0;
                 for (int j = q; j >= 0; --j) {
-                    to_read |= ((matrix_rbyte>>matrix_rbit)&1UL) << j;
-                    matrix_rbit--;
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
-                        matrix_stream.read(&matrix_rbyte,sizeof(char));
+                        matrix_info_stream.read(&matrix_rbyte,sizeof(char));
                     }
+                    to_read |= ((matrix_rbyte>>matrix_rbit)&1UL) << j;
+                    matrix_rbit--;
                 }
                 char sign = (to_read>>q)&1UL;
                 to_read &= ~(1UL<<q);
@@ -47,7 +41,7 @@ void decode_factor(MatrixXd& U, int s, string file1, string file2, string file3)
             }
         }
     }
-    matrix_stream.close();
+    //matrix_info_stream.close();
 }
 
 void decompress(string compressed_file, string output_file, double* data, bool verbose, bool debug) {
@@ -76,7 +70,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     else io_type_size = 8;
     unsigned char n_chunks;
     all_stream.read(reinterpret_cast<char*>(&n_chunks),sizeof(char));
-    all_stream.close();
+    //all_stream.close();
 
     //cout << "****" << endl;
     //cout << s[0] << " " << s[1] << " " << s[2] << endl;
@@ -93,7 +87,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     //chunk_sizes_stream.seekg( 0, ios::beg );
     //int n_chunks = fsize/4;
     
-    ifstream chunk_info_stream("tthresh-tmp/chunk_info", ios::in | ios::binary);
+    //ifstream chunk_info_stream("tthresh-tmp/chunk_info", ios::in | ios::binary);
     double minimums[n_chunks];
     double maximums[n_chunks];
 
@@ -101,27 +95,29 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     for (int chunk_num = 1; chunk_num <= n_chunks; ++chunk_num) {
 
         chunk_info ci;
-        chunk_info_stream.read(reinterpret_cast<char*>(&ci),sizeof(chunk_info));
+        all_stream.read(reinterpret_cast<char*>(&ci),sizeof(chunk_info));
 	minimums[chunk_num-1] = ci.minimum;
 	maximums[chunk_num-1] = ci.maximum;
 
-        stringstream ss;
-        ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
-        decode(ss.str(),"tthresh-tmp/mask.decompressed");
-        ifstream mask("tthresh-tmp/mask.decompressed", ios::in | ios::binary);
-        std::vector<char> buffer((istreambuf_iterator<char>(mask)), istreambuf_iterator<char>());
+        //stringstream ss;
+        //ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
+        //decode(ss.str(),"tthresh-tmp/mask.decompressed");
+        //ifstream mask("tthresh-tmp/mask.decompressed", ios::in | ios::binary);
+        //std::vector<char> buffer((istreambuf_iterator<char>(mask)), istreambuf_iterator<char>());
+	vector<char> decoded;
+	decode(all_stream,ci.compressed_size,decoded);
         long int ind = 0;
-        for (unsigned int i = 0; i < buffer.size() and ind < size; ++i) { // This can be more efficient...
+        for (unsigned int i = 0; i < decoded.size() and ind < size; ++i) { // This can be more efficient...
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (encoding_mask[ind] > 0)
                     ind++;
-                if ((buffer[i] >> chunk_rbit)&1) {
+                if ((decoded[i] >> chunk_rbit)&1) {
                     encoding_mask[ind] = chunk_num;
                 }
                 ind++;
             }
         }
-        if (verbose) cout << "Decoded chunk " << chunk_num << ", mask has " << buffer.size()*8 << " bits, q="
+        if (verbose) cout << "Decoded chunk " << chunk_num << ", mask has " << decoded.size()*8 << " bits, q="
                           << int(chunk_num-1) << endl << flush;
     }
     //chunk_sizes_stream.close();
@@ -138,11 +134,20 @@ void decompress(string compressed_file, string output_file, double* data, bool v
     //maximums_stream.read(reinterpret_cast<char*>(maximums),n_chunks*sizeof(double));
     //maximums_stream.close();
 
-    // Recover the core
+    // Read factor matrices
+    if (verbose) cout << "Decoding factor matrices... " << flush;
+    MatrixXd U1(s[0],s[0]), U2(s[1],s[1]), U3(s[2],s[2]);
+    //ifstream matrix_info_stream("tthresh-tmp/Us_all", ios::in | ios::binary);
+    decode_factor(U1,s[0],all_stream);
+    decode_factor(U2,s[1],all_stream);
+    decode_factor(U3,s[2],all_stream);
+    if (verbose) cout << "Done" << endl << flush;
+    
+    // Recover the core: read all remaining data
     double* c = new double[size];
-    ifstream core_quant_stream("tthresh-tmp/core_quant", ios::in | ios::binary);
-    std::vector<char> core_quant_buffer((istreambuf_iterator<char>(core_quant_stream)), istreambuf_iterator<char>());
-    core_quant_stream.close();
+    //ifstream core_quant_stream("tthresh-tmp/core_quant", ios::in | ios::binary);
+    std::vector<char> core_quant_buffer((istreambuf_iterator<char>(all_stream)), istreambuf_iterator<char>());
+    all_stream.close();
     int core_quant_rbyte = 0;
     char core_quant_rbit = 7;
     for (int i = 0; i < size; ++i) {
@@ -176,14 +181,7 @@ void decompress(string compressed_file, string output_file, double* data, bool v
         else
             c[i] = 0;
     }
-
-    // Read factor matrices
-    if (verbose) cout << "Decoding factor matrices... " << flush;
-    MatrixXd U1(s[0],s[0]), U2(s[1],s[1]), U3(s[2],s[2]);
-    decode_factor(U1,s[0],"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
-    decode_factor(U2,s[1],"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
-    decode_factor(U3,s[2],"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
-    if (verbose) cout << "Done" << endl << flush;
+    all_stream.close();
 
     if (verbose) cout << "Reconstructing tensor... " << flush;
     double* r = c;

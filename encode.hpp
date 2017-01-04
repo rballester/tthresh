@@ -9,6 +9,7 @@
 #include <map>
 #include <iterator>
 #include <algorithm>
+#include <cstring>
 
 using namespace std;
 
@@ -98,17 +99,18 @@ GenerateCodes(const INode * node, const HuffCode & prefix,
     }
 }
 
-void encode(string input_file, string output_file)
+//void encode(string input_file, string output_file)
+void encode(vector<char>& contents, vector<char>& encoding)
 {
 
     /*********************************************/
     // Perform run-length encoding into counters[]
     /*********************************************/
 
-    ifstream input(input_file.c_str(), ios::binary);
-    std::vector < char >
-	contents((istreambuf_iterator < char >(input)),
-		 istreambuf_iterator < char >());
+    //ifstream input(input_file.c_str(), ios::binary);
+    //std::vector < char >
+	//contents((istreambuf_iterator < char >(input)),
+	//	 istreambuf_iterator < char >());
     char last_bit = 1;
     int counter = -1;
     vector<int> counters;
@@ -142,7 +144,7 @@ void encode(string input_file, string output_file)
     GenerateCodes(root, HuffCode(), codes);
     delete root;
 
-    if (frequencies.size() == 1)	// Fix: if there's only one symbol, we still need one bit for it
+    if (frequencies.size() == 1) // Fix: if there's only one symbol, we still need one bit for it
         codes[frequencies.begin()->first].push_back(false);
 
     /***************************************************************************/
@@ -174,15 +176,21 @@ void encode(string input_file, string output_file)
     // Save the dictionary and the translated codes
     /**********************************************/
 
-    ofstream output(output_file.c_str(), ios::out | ios::binary);
+    //ofstream output(output_file.c_str(), ios::out | ios::binary);
     int dict_size = codes.size();
-    output.write(reinterpret_cast < char *>(&dict_size), sizeof(int));
-    output.write(reinterpret_cast < char *>(key_array),
-		 sizeof(int) * codes.size());
-    output.write(reinterpret_cast < char *>(code_array),
-		 sizeof(int) * codes.size());
-    output.write(reinterpret_cast < char *>(&n_bits), sizeof(int));
-    vector < char > translation;
+    encoding = vector<char> ( (1+2*dict_size+1)*sizeof(int) );
+    // TODO copy here
+    memcpy(&encoding[0], reinterpret_cast<char *>(&dict_size), sizeof(int)); // TODO don't use memcpy
+    memcpy(&encoding[0]+(1)*sizeof(int), reinterpret_cast<char *>(key_array), dict_size*sizeof(int));
+    memcpy(&encoding[0]+(1+dict_size)*sizeof(int), reinterpret_cast<char *>(code_array), dict_size*sizeof(int));
+    memcpy(&encoding[0]+(1+2*dict_size)*sizeof(int), reinterpret_cast<char *>(&n_bits), 1*sizeof(int));
+
+    //chunk_info_stream.write(reinterpret_cast < char *>(&dict_size), sizeof(int));
+    //chunk_info_stream.write(reinterpret_cast < char *>(key_array),
+		 //sizeof(int) * codes.size());
+    //chunk_info_stream.write(reinterpret_cast < char *>(code_array),
+		 //sizeof(int) * codes.size());
+    //chunk_info_stream.write(reinterpret_cast < char *>(&n_bits), sizeof(int));
     char translation_wbyte = 0;
     char translation_wbit = 7;
     for (unsigned int i = 0; i < counters.size(); ++i) {
@@ -190,17 +198,19 @@ void encode(string input_file, string output_file)
             translation_wbyte |= codes[counters[i]][j] << translation_wbit;
             translation_wbit--;
             if (translation_wbit < 0) {
-            translation.push_back(translation_wbyte);
+            encoding.push_back(translation_wbyte);
             translation_wbit = 7;
             translation_wbyte = 0;
             }
         }
     }
     if (translation_wbit < 7) {
-	translation.push_back(translation_wbyte);
+	encoding.push_back(translation_wbyte);
     }
-    std::copy(translation.begin(), translation.end(),
-	      std::ostreambuf_iterator < char >(output));
-    output.close();
-
+    ////// TODO Write as we fill "translation"
+    //for (int i = 0; i < chunk_info_stream.size(); ++i)
+    //  chunk_info_stream.write(reinterpret_cast<char *>(&translation[i]),sizeof(char));
+    
+    //output.close();
+    //return encoding;
 }

@@ -5,7 +5,7 @@ enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, s
 enum Target { eps, rmse, psnr };
 
 struct chunk_info {
-    unsigned int size;
+    unsigned int compressed_size;
     double minimum;
     double maximum;
 };

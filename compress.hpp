@@ -7,22 +7,25 @@
 using namespace std;
 using namespace Eigen;
 
-void encode_factor(MatrixXd& U, int s, vector<char>& columns_q, string file1, string file2, string file3) {
+// Structure of the compressed file:
+// 3 * 4 bytes: tensor sizes
+// 1 byte: tensor type
+// 1 byte: number of chunks
+// n_chunks * (chunk_info + compressed mask)
+// matrix_info
+// core_quant
 
-    // First, the q for each column
-    ofstream columns_q_stream(file1.c_str(), ios::out | ios::binary);
-    for (int i = 0; i < s; ++i)
-        columns_q_stream.write(&columns_q[i],sizeof(char));
-    columns_q_stream.close();
-
-    // Next, the matrix's maximum, used for quantization
-    ofstream limits_stream(file2.c_str(), ios::out | ios::binary);
+void encode_factor(MatrixXd& U, int s, vector<char>& columns_q, ofstream& matrix_info_stream) {
+    
+    // First, the matrix's maximum, used for quantization
     double maximum = U.maxCoeff();
-    limits_stream.write(reinterpret_cast<char*>(&maximum),sizeof(double));
-    limits_stream.close();
+    matrix_info_stream.write(reinterpret_cast<char*>(&maximum),sizeof(double));
+    
+    // Next, the q for each column
+    for (int i = 0; i < s; ++i)
+        matrix_info_stream.write(reinterpret_cast<char*>(&columns_q[i]),sizeof(char));
 
     // Finally the matrix itself, quantized
-    ofstream matrix_stream(file3.c_str(), ios::out | ios::binary);
     char matrix_wbyte = 0;
     char matrix_wbit = 7;
     for (int j = 0; j < s; ++j) {
@@ -37,7 +40,7 @@ void encode_factor(MatrixXd& U, int s, vector<char>& columns_q, string file1, st
                     matrix_wbit--;
                     if (matrix_wbit < 0) {
                         matrix_wbit = 7;
-                        matrix_stream.write(&matrix_wbyte,sizeof(char));
+                        matrix_info_stream.write(&matrix_wbyte,sizeof(char));
                         matrix_wbyte = 0;
                     }
                 }
@@ -45,15 +48,9 @@ void encode_factor(MatrixXd& U, int s, vector<char>& columns_q, string file1, st
         }
     }
     if (matrix_wbit < 7)
-        matrix_stream.write(&matrix_wbyte,sizeof(char));
-    matrix_stream.close();
+        matrix_info_stream.write(&matrix_wbyte,sizeof(char));
+    //matrix_info_stream.close();
 }
-
-// Structure of the compressed file:
-// 3 * 4 bytes: tensor sizes
-// 1 byte: tensor type
-// 1 byte: number of chunks
-// n_chunks * (chunk_info + compressed_mask)
 
 double* compress(string input_file, string compressed_file, string io_type, int s[3], Target target, double target_value, bool verbose, bool debug) {
 
@@ -80,13 +77,15 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         cout << "Unrecognized I/O type" << endl;
         exit(1);
     }
+    
+    // Load input file into memory
     char* in = new char[size*type_size];
     ifstream in_stream(input_file.c_str(), ios::in | ios::binary);
     if (!in_stream.is_open()) {
         cout << "Could not open \"" << input_file << "\"" << endl;
         exit(1);
     }
-    streampos fsize = in_stream.tellg();
+    streampos fsize = in_stream.tellg(); // Check that buffer size matches expected size
     in_stream.seekg( 0, ios::end );
     fsize = in_stream.tellg() - fsize;
     if (size*type_size != fsize) {
@@ -97,6 +96,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     in_stream.seekg(0, ios::beg);
     in_stream.read(in,size*type_size);
     in_stream.close();
+    
+    // Cast the tensor to doubles
     double* data;
     double dmin = numeric_limits<double>::max(), dmax = numeric_limits<double>::min(), dnorm = 0; // Tensor statistics
     if (io_type == "double")
@@ -117,6 +118,27 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     dnorm = sqrt(dnorm);
     if (io_type != "double")
         delete[] in;
+
+    /****************************/
+    // Save tensor sizes and type
+    /****************************/
+
+    ofstream all_stream("tthresh-tmp/all", ios::out | ios::binary);
+    //ofstream sizes_stream("tthresh-tmp/all", ios::out | ios::binary);
+    all_stream.write(reinterpret_cast<char*>( &s[0] ),sizeof(int));
+    all_stream.write(reinterpret_cast<char*>( &s[1] ),sizeof(int));
+    all_stream.write(reinterpret_cast<char*>( &s[2] ),sizeof(int));
+    //all_stream.close();
+
+    char io_type_code;
+    if (io_type == "uchar") io_type_code = 0;
+    else if (io_type == "int") io_type_code = 1;
+    else if (io_type == "float") io_type_code = 2;
+    else io_type_code = 3;
+    all_stream.write(reinterpret_cast<char*>( &io_type_code ),sizeof(char));
+    all_stream << char(0); // We don't know the number of chunks yet
+    //cout << "**** n_chunks=" << int(n_chunks) << endl;
+    //all_stream.close();    
 
     /*********************************/
     // Create and decompose the tensor
@@ -161,9 +183,9 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     int adder = 1;
     char q = 0;
     int left = 0;
-    int old_right = left;
-    int right = left;
-    ofstream chunk_info_stream("tthresh-tmp/chunk_info", ios::out | ios::binary);
+    int old_right = left; // Inclusive bound
+    int right = left; // Exclusive bound
+    //ofstream chunk_info_stream("tthresh-tmp/chunk_info", ios::out | ios::binary);
     //ofstream chunk_sizes_stream("tthresh-tmp/chunk_sizes", ios::out | ios::binary);
     //ofstream minimums_stream("tthresh-tmp/minimums", ios::out | ios::binary);
     //ofstream maximums_stream("tthresh-tmp/maximums", ios::out | ios::binary);
@@ -182,7 +204,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             double sse = 0;
             if (right > left+1) {
                 if (q > 0) {
-                    for (int i = left; i < right; ++i) {
+                    for (int i = left; i < right; ++i) { // TODO Can we approximate the error computation?
                         long int quant = roundl((sorting[i].first-chunk_min)*((1UL<<q)-1.)/(chunk_max-chunk_min));
                         double dequant = quant*(chunk_max-chunk_min)/((1UL<<q)-1.) + chunk_min;
                         sse += (sorting[i].first-dequant)*(sorting[i].first-dequant);
@@ -221,11 +243,6 @@ double* compress(string input_file, string compressed_file, string io_type, int 
 	int chunk_size = (right-left);
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right-1].first;
-	chunk_info ci;
-	ci.size = chunk_size;
-	ci.minimum = chunk_min;
-	ci.maximum = chunk_max;
-	chunk_info_stream.write(reinterpret_cast<char*>( &ci ),sizeof(chunk_info));
         //chunk_sizes_stream.write(reinterpret_cast<char*>( &chunk_size ),sizeof(int));
         //minimums_stream.write(reinterpret_cast<char*>( &chunk_min ),sizeof(double));
         //maximums_stream.write(reinterpret_cast<char*>( &chunk_max ),sizeof(double)); // TODO not needed if q = 0
@@ -236,7 +253,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
 
         for (int i = left; i < right; ++i) {
             if (q == 63) // Remaining values will need 64 bits. So let's copy the value verbatim and forget quantization
-                core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
+                //core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
+		core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
             else if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
                 unsigned long int to_write = 0;
                 if (chunk_size > 1)
@@ -263,7 +281,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
             U3_q[z] = max(U3_q[z],q);
         }
 
-        ofstream mask("tthresh-tmp/mask.raw", ios::out | ios::binary);
+        vector<char> mask;
+        //ofstream mask("tthresh-tmp/mask.raw", ios::out | ios::binary);
         char mask_wbyte = 0;
         char mask_wbit = 7;
         for (int i = 0; i < size; ++i) {
@@ -274,36 +293,47 @@ double* compress(string input_file, string compressed_file, string io_type, int 
                 mask_wbit--;
             }
             if (mask_wbit < 0) {
-                mask.write(&mask_wbyte,sizeof(char));
+                //mask.write(&mask_wbyte,sizeof(char));
+		mask.push_back(mask_wbyte);
                 mask_wbyte = 0;
                 mask_wbit = 7;
             }
         }
         if (mask_wbit < 7)
-            mask.write(&mask_wbyte,sizeof(char));
-        mask.close();
+	    mask.push_back(mask_wbyte);
+            //mask.write(&mask_wbyte,sizeof(char));
+        //mask.close();
         stringstream ss;
-        ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
-        encode("tthresh-tmp/mask.raw",ss.str());
-        if (debug) { // Check RLE+Huffman correctness
-            decode(ss.str(),"tthresh-tmp/mask.decompressed");
-            if (system("diff tthresh-tmp/mask.raw tthresh-tmp/mask.decompressed") != 0) {
-                cout << "Huffman error" << endl;
-                exit(1);
-            }
-            remove("tthresh-tmp/mask.decompressed");
-        }
-        remove("tthresh-tmp/mask.raw");
+        //ss << "tthresh-tmp/mask_" << setw(4) << setfill('0') << chunk_num << ".compressed";
+        //encode("tthresh-tmp/mask.raw",ss.str());
+	vector<char> encoding;
+	encode(mask,encoding);
+	chunk_info ci;
+	ci.compressed_size = encoding.size();
+	ci.minimum = chunk_min;
+	ci.maximum = chunk_max;
+	all_stream.write(reinterpret_cast<char*>( &ci ),sizeof(chunk_info));
+        std::copy(encoding.begin(), encoding.end(), std::ostreambuf_iterator < char >(all_stream));
+
+        //if (debug) { // Check RLE+Huffman correctness
+        //    decode(ss.str(),"tthresh-tmp/mask.decompressed");
+        //    if (system("diff tthresh-tmp/mask.raw tthresh-tmp/mask.decompressed") != 0) {
+        //        cout << "Huffman error" << endl;
+        //        exit(1);
+        //    }
+        //    remove("tthresh-tmp/mask.decompressed");
+        //}
+        //remove("tthresh-tmp/mask.raw");
         if (verbose) {
             int coeff_bits = 0;
             if (q > 0)
                 coeff_bits = (q+1)*(right-left); // The "+1" is for the sign
             string ss_str = ss.str();
             std::ifstream in(ss_str.c_str(), std::ifstream::ate | std::ifstream::binary);
-            int huffman_bits = in.tellg()*8;
+            //int huffman_bits = in.tellg()*8;
             in.close();
             cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max
-                << ", cbits=" << coeff_bits << ", hbits=" << huffman_bits << ", q=" << int(q) << ", bits=["
+                << ", cbits=" << coeff_bits << ", q=" << int(q) << ", bits=["
                 << left << "," << right << "), size=" << right-left << endl << flush;
         }
 
@@ -317,59 +347,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     //chunk_sizes_stream.close();
     //minimums_stream.close();
     //maximums_stream.close();
-    chunk_info_stream.close();
-
-    /********************************************/
-    // Save the core's encoding
-    /********************************************/
-
-    if (verbose) cout << "Saving core encoding... " << flush;
-    ofstream core_quant_stream("tthresh-tmp/core_quant", ios::out | ios::binary);
-    char core_quant_wbyte = 0;
-    char core_quant_wbit = 7;
-    for (int i = 0; i < size; ++i) {
-        chunk_num = encoding_mask[i];
-        char q = chunk_num-1;
-        if (q > 0) {
-            for (long int j = q; j >= 0; --j) {
-                core_quant_wbyte |= ((core_to_write[i] >> j)&1UL) << core_quant_wbit;
-                core_quant_wbit--;
-                if (core_quant_wbit < 0) {
-                    core_quant_stream.write(&core_quant_wbyte,sizeof(char));
-                    core_quant_wbyte = 0;
-                    core_quant_wbit = 7;
-                }
-            }
-        }
-    }
-    if (core_quant_wbit < 7)
-        core_quant_stream.write(&core_quant_wbyte,sizeof(char));
-    core_quant_stream.close();
-    delete[] core_to_write;
-    if (verbose) cout << "Done" << endl << flush;
-
-    /****************************/
-    // Save tensor sizes and type
-    /****************************/
-
-    ofstream all_stream("tthresh-tmp/all", ios::out | ios::binary);
-    //ofstream sizes_stream("tthresh-tmp/all", ios::out | ios::binary);
-    all_stream.write(reinterpret_cast<char*>( &s[0] ),sizeof(int));
-    all_stream.write(reinterpret_cast<char*>( &s[1] ),sizeof(int));
-    all_stream.write(reinterpret_cast<char*>( &s[2] ),sizeof(int));
     //all_stream.close();
-
-    char io_type_code;
-    if (io_type == "uchar") io_type_code = 0;
-    else if (io_type == "int") io_type_code = 1;
-    else if (io_type == "float") io_type_code = 2;
-    else io_type_code = 3;
-    all_stream.write(reinterpret_cast<char*>( &io_type_code ),sizeof(char));
-    unsigned char n_chunks = q;
-    all_stream.write(reinterpret_cast<char*>( &n_chunks ),sizeof(char));
-    //cout << "**** n_chunks=" << int(n_chunks) << endl;
-    all_stream.close();
-
+    
     /*********************************/
     // Encode and save factor matrices
     /*********************************/
@@ -388,10 +367,45 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     }
 
     if (verbose) cout << "Encoding factor matrices... " << flush;
-    encode_factor(U1,s[0],U1_q,"tthresh-tmp/U1_q","tthresh-tmp/U1_limits","tthresh-tmp/U1");
-    encode_factor(U2,s[1],U2_q,"tthresh-tmp/U2_q","tthresh-tmp/U2_limits","tthresh-tmp/U2");
-    encode_factor(U3,s[2],U3_q,"tthresh-tmp/U3_q","tthresh-tmp/U3_limits","tthresh-tmp/U3");
+    //ofstream matrix_info_stream("tthresh-tmp/Us_all", ios::out | ios::binary);
+    encode_factor(U1,s[0],U1_q,all_stream);
+    encode_factor(U2,s[1],U2_q,all_stream);
+    encode_factor(U3,s[2],U3_q,all_stream);
     if (verbose) cout << "Done" << endl << flush;
+    
+    /********************************************/
+    // Save the core's encoding
+    /********************************************/
+
+    if (verbose) cout << "Saving core encoding... " << flush;
+    //ofstream core_quant_stream("tthresh-tmp/core_quant", ios::out | ios::binary);
+    char core_quant_wbyte = 0;
+    char core_quant_wbit = 7;
+    for (int i = 0; i < size; ++i) {
+        chunk_num = encoding_mask[i];
+        char q = chunk_num-1;
+        if (q > 0) {
+            for (long int j = q; j >= 0; --j) {
+                core_quant_wbyte |= ((core_to_write[i] >> j)&1UL) << core_quant_wbit;
+                core_quant_wbit--;
+                if (core_quant_wbit < 0) {
+                    all_stream.write(&core_quant_wbyte,sizeof(char));
+                    core_quant_wbyte = 0;
+                    core_quant_wbit = 7;
+                }
+            }
+        }
+    }
+    if (core_quant_wbit < 7)
+        all_stream.write(&core_quant_wbyte,sizeof(char));
+    delete[] core_to_write;
+    if (verbose) cout << "Done" << endl << flush;
+
+    // Finally: write the number of chunks, which we now know
+    all_stream.seekp(13);
+    unsigned char n_chunks = q;
+    all_stream.write(reinterpret_cast<char*>( &n_chunks ),sizeof(char));
+    all_stream.close();
 
     /***********************************************/
     // Tar+gzip the final result and compute the bpv
