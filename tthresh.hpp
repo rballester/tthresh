@@ -10,4 +10,5 @@ struct chunk_info {
     double maximum;
 };
 
-#endif // TTHRESH_HPP
+#endif
+// TTHRESH_HPP
