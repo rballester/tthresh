@@ -191,7 +191,6 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     //ofstream maximums_stream("tthresh-tmp/maximums", ios::out | ios::binary);
     vector<int> encoding_mask(size,0);
     int chunk_num = 1;
-    unsigned long int* core_to_write = new unsigned long int[size];
     vector<char> U1_q(s[0],0);
     vector<char> U2_q(s[1],0);
     vector<char> U3_q(s[2],0);
@@ -243,25 +242,21 @@ double* compress(string input_file, string compressed_file, string io_type, int 
 	int chunk_size = (right-left);
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right-1].first;
-        //chunk_sizes_stream.write(reinterpret_cast<char*>( &chunk_size ),sizeof(int));
-        //minimums_stream.write(reinterpret_cast<char*>( &chunk_min ),sizeof(double));
-        //maximums_stream.write(reinterpret_cast<char*>( &chunk_max ),sizeof(double)); // TODO not needed if q = 0
 
         /********************************************/
-        // Fill the core buffer with quantized values
+        // Quantized (in-place) the core elements
         /********************************************/
 
         for (int i = left; i < right; ++i) {
-            if (q == 63) // Remaining values will need 64 bits. So let's copy the value verbatim and forget quantization
-                //core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
-		core_to_write[sorting[i].second] = static_cast<unsigned long int>(c[sorting[i].second]);
-            else if (q > 0) { // If q = 0 there's no need to store anything quantized, not even the sign
+	    // If q = 0 there's no need to store anything quantized, not even the sign
+	    // If q = 63, values are kept as they are and we forget about quantization
+            if (q > 0 and q < 63) {
                 unsigned long int to_write = 0;
                 if (chunk_size > 1)
                     // The following min() prevents overflowing the q-bit representation when converting double -> long int
                     to_write = min(((1UL<<q)-1),(unsigned long int)roundl((sorting[i].first-chunk_min)/(chunk_max-chunk_min)*((1UL<<q)-1)));
                 to_write |= (c[sorting[i].second]<0)*(1UL<<q);
-                core_to_write[sorting[i].second] = to_write; // TODO copy into c[] directly?
+                c[sorting[i].second] = static_cast<double>(to_write);
             }
         }
 
@@ -343,7 +338,6 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         old_right = left;
         chunk_num++;
     }
-    delete[] c;
     //chunk_sizes_stream.close();
     //minimums_stream.close();
     //maximums_stream.close();
@@ -374,7 +368,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     if (verbose) cout << "Done" << endl << flush;
     
     /********************************************/
-    // Save the core's encoding
+    // Save the core encoding
     /********************************************/
 
     if (verbose) cout << "Saving core encoding... " << flush;
@@ -386,7 +380,7 @@ double* compress(string input_file, string compressed_file, string io_type, int 
         char q = chunk_num-1;
         if (q > 0) {
             for (long int j = q; j >= 0; --j) {
-                core_quant_wbyte |= ((core_to_write[i] >> j)&1UL) << core_quant_wbit;
+                core_quant_wbyte |= ((static_cast<unsigned long int>(c[i]) >> j)&1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
                     all_stream.write(&core_quant_wbyte,sizeof(char));
@@ -398,8 +392,8 @@ double* compress(string input_file, string compressed_file, string io_type, int 
     }
     if (core_quant_wbit < 7)
         all_stream.write(&core_quant_wbyte,sizeof(char));
-    delete[] core_to_write;
     if (verbose) cout << "Done" << endl << flush;
+    delete[] c;
 
     // Finally: write the number of chunks, which we now know
     all_stream.seekp(13);
