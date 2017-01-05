@@ -16,7 +16,7 @@ using namespace std;
 void print_usage()
 {
     cout << endl;
-    cout << "tthresh: a compressor for 3D and 4D data" << endl;
+    cout << "tthresh: a compressor for 3D and 4D data sets" << endl;
     cout << "Usage: tthresh <options>" << endl;
     cout << endl;
     cout << "\t-h: print this usage information and exit" << endl;
@@ -211,11 +211,6 @@ int main(int argc, char *argv[])
     /***************************/
     // The real work starts here
     /***************************/
-
-    cout << "SIZE_INDEX=" << s.size() << endl;
-    for (int i = 0; i < s.size(); ++i)
-	cout << s[i] << " ";
-    cout << endl;
 
     double *data = NULL;
     if (input_flag) {

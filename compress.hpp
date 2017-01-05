@@ -18,8 +18,6 @@ using namespace Eigen;
 
 void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstream & output_stream)
 {
-    cout << "NCOLUMNS: " << n_columns << endl;
-    cout << U(0, 0) << endl;
     // First, the matrix's maximum, used for quantization
     double maximum = U.maxCoeff();
     output_stream.write(reinterpret_cast < char *>(&maximum), sizeof(double));
@@ -58,7 +56,6 @@ void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstr
 
 double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, bool verbose, bool debug)
 {
-
     if (verbose)
 	cout << endl << "/***** Compression *****/" << endl << endl << flush;
 
@@ -87,7 +84,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 	exit(1);
     }
 
+    /****************************/
     // Load input file into memory
+    /****************************/
+    
     char *in = new char[size * type_size];
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
@@ -113,6 +113,26 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     input_stream.read(in, size * type_size);
     input_stream.close();
 
+    /****************************/
+    // Save tensor dimensionality, sizes and type
+    /****************************/
+
+    ofstream output_stream("tthresh-tmp/all", ios::out | ios::binary);
+    output_stream << n;		// Number of dimensions
+    output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
+
+    char io_type_code;
+    if (io_type == "uchar")
+	io_type_code = 0;
+    else if (io_type == "int")
+	io_type_code = 1;
+    else if (io_type == "float")
+	io_type_code = 2;
+    else
+	io_type_code = 3;
+    output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
+    output_stream << char (0);	// We don't know the number of chunks yet 
+    
     // Cast the tensor to doubles
     double *data;
     double dmin = numeric_limits < double >::max(), dmax = numeric_limits < double >::min(), dnorm = 0;	// Tensor statistics
@@ -135,26 +155,6 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     dnorm = sqrt(dnorm);
     if (io_type != "double")
 	delete[]in;
-
-    /****************************/
-    // Save tensor dimensionality, sizes and type
-    /****************************/
-
-    ofstream output_stream("tthresh-tmp/all", ios::out | ios::binary);
-    output_stream << n;		// Number of dimensions
-    output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
-
-    char io_type_code;
-    if (io_type == "uchar")
-	io_type_code = 0;
-    else if (io_type == "int")
-	io_type_code = 1;
-    else if (io_type == "float")
-	io_type_code = 2;
-    else
-	io_type_code = 3;
-    output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
-    output_stream << char (0);	// We don't know the number of chunks yet 
 
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric
