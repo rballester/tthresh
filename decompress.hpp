@@ -5,24 +5,26 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd & U, int s, ifstream & input_stream)
+void decode_factor(MatrixXd & U, int n_columns, ifstream & input_stream)
 {
+
+    U = MatrixXd(n_columns, n_columns);
 
     // First, the matrix's maximum, used for quantization
     double maximum;
     input_stream.read(reinterpret_cast < char *>(&maximum), sizeof(double));
 
     // Next, the q for each column
-    vector < char >columns_q(s);
-    for (int i = 0; i < s; ++i)
-	input_stream.read(&columns_q[i], sizeof(char));
+    vector < char >U_q(n_columns);
+    for (int i = 0; i < n_columns; ++i)
+	input_stream.read(&U_q[i], sizeof(char));
 
     // Finally we dequantize the matrix itself
     char matrix_rbyte;
     char matrix_rbit = -1;
-    for (int j = 0; j < s; ++j) {
-	for (int i = 0; i < s; ++i) {
-	    char q = columns_q[j];
+    for (int j = 0; j < n_columns; ++j) {
+	for (int i = 0; i < n_columns; ++i) {
+	    char q = U_q[j];
 	    if (q == 0)
 		U(i, j) = 0;
 	    else {
@@ -57,13 +59,21 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     string command(ss.str());
     _ = system(command.c_str());
 
-    // Read output tensor type
+    // Read output tensor dimensionality, sizes and type
     ifstream input_stream("tthresh-tmp/all", ios::in | ios::binary);
-    int s[3];
-    input_stream.read(reinterpret_cast < char *>(s), 3 * sizeof(int));
-    long int size = s[0] * s[1] * s[2];
-    if (debug)
-	cout << "Decompressing a tensor of size " << s[0] << " x " << s[1] << " x " << s[2] << "..." << endl;
+    char n;
+    input_stream.read(reinterpret_cast < char *>(&n), sizeof(char));
+    vector < int >s(n);
+    input_stream.read(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
+    long int size = 1;
+    for (int i = 0; i < n; ++i)
+	size *= s[i];
+    if (debug) {
+	cout << "Decompressing a tensor of size " << s[0];
+	for (int i = 1; i < n; ++i)
+	    cout << " x " << s[i];
+	cout << "..." << endl;
+    }
 
     char io_type_code;
     input_stream.read(reinterpret_cast < char *>(&io_type_code), sizeof(char));
@@ -104,18 +114,15 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 	    }
 	}
 	if (verbose)
-	    cout << "Decoded chunk " << chunk_num << ", mask has " << decoded.size() * 8 << " bits, q="
-		<< int (chunk_num - 1) << endl << flush;
+	    cout << "Decoded chunk " << chunk_num << ", mask has " << decoded.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
     }
 
     // Read factor matrices
     if (verbose)
 	cout << "Decoding factor matrices... " << flush;
-    MatrixXd U1(s[0], s[0]), U2(s[1], s[1]), U3(s[2], s[2]);
-    //ifstream input_stream("tthresh-tmp/Us_all", ios::in | ios::binary);
-    decode_factor(U1, s[0], input_stream);
-    decode_factor(U2, s[1], input_stream);
-    decode_factor(U3, s[2], input_stream);
+    vector < MatrixXd > Us(n);
+    for (int i = 0; i < n; ++i)
+	decode_factor(Us[i], s[i], input_stream);
     if (verbose)
 	cout << "Done" << endl << flush;
 
@@ -161,7 +168,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (verbose)
 	cout << "Reconstructing tensor... " << flush;
     double *r = c;
-    tucker(r, s, U1, U2, U3, false);
+    tucker(r, s, Us, false);
     if (verbose)
 	cout << "Done" << endl << flush;
 
@@ -199,7 +206,6 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 	output_stream.write(buffer, io_type_size * buffer_wpos);
     delete[]buffer;
     output_stream.close();
-//    if (debug) reco.debug();
 
     if (data != NULL) {		// If the uncompressed input is available, we compute the error statistics
 	input_norm = sqrt(input_norm);

@@ -36,14 +36,14 @@ class InternalNode:public INode {
     INode *const
      right;
 
-    InternalNode(INode * c0, INode * c1): INode(c0->f + c1->f), left(c0), right(c1) {
+    InternalNode(INode * c0, INode * c1):INode(c0->f + c1->f), left(c0), right(c1) {
     } ~InternalNode() {
 	delete left;
 	delete right;
     }
 };
 
-class LeafNode: public INode {
+class LeafNode:public INode {
   public:
     const int
      c;
@@ -54,8 +54,7 @@ class LeafNode: public INode {
 struct NodeCmp {
     bool operator  () (const INode * lhs, const INode * rhs) const {
 	return lhs->f > rhs->f;
-    }
-};
+}};
 
 INode *BuildTree(std::map < int, int >&frequencies)
 {
@@ -168,8 +167,7 @@ void encode(vector < char >&contents, vector < char >&encoding)
     encoding = vector < char >((1 + 2 * dict_size + 1) * sizeof(int));
     memcpy(&encoding[0], reinterpret_cast < char *>(&dict_size), sizeof(int));	// TODO don't use memcpy
     memcpy(&encoding[0] + (1) * sizeof(int), reinterpret_cast < char *>(key_array), dict_size * sizeof(int));
-    memcpy(&encoding[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array),
-	   dict_size * sizeof(int));
+    memcpy(&encoding[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array), dict_size * sizeof(int));
     memcpy(&encoding[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), 1 * sizeof(int));
 
     char translation_wbyte = 0;

@@ -16,20 +16,20 @@ using namespace std;
 void print_usage()
 {
     cout << endl;
+    cout << "tthresh: a compressor for 3D and 4D data" << endl;
     cout << "Usage: tthresh <options>" << endl;
     cout << endl;
     cout << "\t-h: print this usage information and exit" << endl;
-    cout << "\t-i <input file>: input 3D volume (string). Either -i or -o (or both) must be specified" << endl;
+    cout << "\t-i <input file>: input 3D/4D data (string). Either -i or -o (or both) must be specified" << endl;
     cout << "\t-c <compressed file>: name for the compressed result (string)" << endl;
-    cout << "\t-o <output file>: if specified, the compressed file (-c) will be decompressed to this name (string)" <<
-	endl;
+    cout << "\t-o <output file>: if specified, the compressed file (-c) will be decompressed to this file name (string)" << endl;
     cout << "\t-v: verbose mode; prints main algorithm steps" << endl;
     cout << "\t-d: print debug information" << endl;
     cout << endl;
     cout << "Compression parameters (needed if -i):" << endl;
     cout << endl;
     cout << "\t-t <type>: input type (can be \"uchar\", \"int\", \"float\" or \"double\")" << endl;
-    cout << "\t-s <x> <y> <z>: the volume size (3 integers)" << endl;
+    cout << "\t-s <x> <y> <z> [<t>]: the data sizes (3 or 4 integers)" << endl;
     cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE or PSNR, respectively)" << endl;
     cout << endl;
 }
@@ -43,6 +43,14 @@ void display_error(string msg)
     exit(1);
 }
 
+bool is_number(string & s)
+{
+    string::const_iterator it = s.begin();
+    while (it != s.end()and isdigit(*it))
+	++it;
+    return !s.empty()and it == s.end();
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -53,10 +61,8 @@ int main(int argc, char *argv[])
     Mode mode = none_mode;
     Target target = eps;
     double target_value = -1;
-    int s[3] = { -1, -1, -1 };
-    int size_index = 0;
-    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false,
-	sizes_flag = false, target_flag = false, verbose_flag = false, debug_flag = false;
+    vector < int >s;
+    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;
     string output_file;
@@ -74,6 +80,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (mode == none_mode) {
+	    if (not is_number(arg) and mode == sizes_mode)
+		mode = none_mode;
 	    if (arg[0] != '-')
 		display_error("Unrecognized flag \"" + arg + "\"");
 	    if (arg.size() != 2)
@@ -161,11 +169,12 @@ int main(int argc, char *argv[])
 	    mode = none_mode;
 	} else if (mode == sizes_mode) {
 	    stringstream ss(arg);
-	    ss >> s[size_index];
-	    if (s[size_index] <= 0)
-		display_error("Wrong size argument");
-	    size_index++;
-	    if (size_index == 3) {
+	    int next_size;
+	    ss >> next_size;
+	    if (next_size <= 0)
+		display_error("Size arguments must be positive integers");
+	    s.push_back(next_size);
+	    if (s.size() == 4) {
 		mode = none_mode;
 	    }
 	} else if (mode == target_mode) {
@@ -181,9 +190,9 @@ int main(int argc, char *argv[])
 	if (!io_type_flag)
 	    display_error("Specify an IO type (-t)");
 	if (!sizes_flag or target_value <= 0)
-	    display_error("Specify both volume sizes (-s) and accuracy target (-e, -r, or -p)");
-	if (size_index < 3)
-	    display_error("Specify 3 integer sizes after -s");
+	    display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
+	if (s.size() < 3)
+	    display_error("Specify 3 or 4 integer sizes after -s");
     }
 
     if (!compressed_flag or compressed_file == "")
@@ -202,6 +211,11 @@ int main(int argc, char *argv[])
     /***************************/
     // The real work starts here
     /***************************/
+
+    cout << "SIZE_INDEX=" << s.size() << endl;
+    for (int i = 0; i < s.size(); ++i)
+	cout << s[i] << " ";
+    cout << endl;
 
     double *data = NULL;
     if (input_flag) {

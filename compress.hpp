@@ -7,30 +7,32 @@
 using namespace std;
 using namespace Eigen;
 
-// Structure of the compressed file:
-// 3 * 4 bytes: tensor sizes
+// *** Structure of the compressed file ***
+// 1 byte: number of dimensions N
+// N * 4 bytes: tensor sizes
 // 1 byte: tensor type
 // 1 byte: number of chunks
 // Chunk information and masks: n_chunks * (chunk_info + compressed mask)
 // Factor matrices
 // The quantized core
 
-void encode_factor(MatrixXd & U, int s, vector < char >&columns_q, ofstream & output_stream)
+void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstream & output_stream)
 {
-
+    cout << "NCOLUMNS: " << n_columns << endl;
+    cout << U(0, 0) << endl;
     // First, the matrix's maximum, used for quantization
     double maximum = U.maxCoeff();
     output_stream.write(reinterpret_cast < char *>(&maximum), sizeof(double));
 
     // Next, the q for each column
-    for (int i = 0; i < s; ++i)
+    for (int i = 0; i < n_columns; ++i)
 	output_stream.write(reinterpret_cast < char *>(&columns_q[i]), sizeof(char));
 
     // Finally the matrix itself, quantized
     char matrix_wbyte = 0;
     char matrix_wbit = 7;
-    for (int j = 0; j < s; ++j) {
-	for (int i = 0; i < s; ++i) {
+    for (int j = 0; j < n_columns; ++j) {
+	for (int i = 0; i < n_columns; ++i) {
 	    char q = columns_q[j];
 	    if (q > 0) {
 		q = min(63, q + 2);	// Seems a good compromise
@@ -54,8 +56,7 @@ void encode_factor(MatrixXd & U, int s, vector < char >&columns_q, ofstream & ou
 	output_stream.write(&matrix_wbyte, sizeof(char));
 }
 
-double *compress(string input_file, string compressed_file, string io_type,
-		 int s[3], Target target, double target_value, bool verbose, bool debug)
+double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, bool verbose, bool debug)
 {
 
     if (verbose)
@@ -68,7 +69,10 @@ double *compress(string input_file, string compressed_file, string io_type,
     // Read the input data file
     /**************************/
 
-    int size = s[0] * s[1] * s[2];
+    char n = s.size();
+    long int size = 1;
+    for (int i = 0; i < n; ++i)
+	size *= s[i];
     char type_size;
     if (io_type == "uchar")
 	type_size = sizeof(char);
@@ -94,8 +98,15 @@ double *compress(string input_file, string compressed_file, string io_type,
     input_stream.seekg(0, ios::end);
     fsize = input_stream.tellg() - fsize;
     if (size * type_size != fsize) {
-	cout << "Invalid file size (expected " << s[0] << "*" << s[1] <<
-	    "*" << s[2] << "*" << int (type_size) << " = " << size * type_size << ", but is " << fsize << ")" << endl;
+	cout << "Invalid file size: expected (" << s[0];
+	for (int i = 1; i < n; ++i)
+	    cout << "*" << s[i];
+	cout << ") * " << int (type_size) << " = " << size * type_size << ", but is " << fsize;
+	if (size * type_size > fsize) {
+	    cout << " (" << size * type_size / double (fsize) << " times too small)" << endl;
+	} else {
+	    cout << " (" << fsize / double (size * type_size) << " times too large)" << endl;
+	}
 	exit(1);
     }
     input_stream.seekg(0, ios::beg);
@@ -126,13 +137,12 @@ double *compress(string input_file, string compressed_file, string io_type,
 	delete[]in;
 
     /****************************/
-    // Save tensor sizes and type
+    // Save tensor dimensionality, sizes and type
     /****************************/
 
     ofstream output_stream("tthresh-tmp/all", ios::out | ios::binary);
-    output_stream.write(reinterpret_cast < char *>(&s[0]), sizeof(int));
-    output_stream.write(reinterpret_cast < char *>(&s[1]), sizeof(int));
-    output_stream.write(reinterpret_cast < char *>(&s[2]), sizeof(int));
+    output_stream << n;		// Number of dimensions
+    output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
 
     char io_type_code;
     if (io_type == "uchar")
@@ -166,11 +176,11 @@ double *compress(string input_file, string compressed_file, string io_type,
     /*********************************/
 
     if (verbose)
-	cout << "Decomposing the tensor... " << flush;
+	cout << "Decomposing the " << int (n) << "D tensor... " << flush;
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
-    MatrixXd U1, U2, U3;	// Tucker factor matrices
-    tucker(c, s, U1, U2, U3, true);
+    vector < MatrixXd > Us(n);	// Tucker factor matrices
+    tucker(c, s, Us, true);
     if (verbose)
 	cout << "Done" << endl << flush;
 
@@ -191,16 +201,16 @@ double *compress(string input_file, string compressed_file, string io_type,
     // Generate adaptive chunks from the sorted curve
     /************************************************/
 
-    int adder = 1;
+    long int adder = 1;
     char q = 0;
-    int left = 0;
-    int old_right = left;	// Inclusive bound
-    int right = left;		// Exclusive bound
+    long int left = 0;
+    long int old_right = left;	// Inclusive bound
+    long int right = left;	// Exclusive bound
     vector < int >encoding_mask(size, 0);
     int chunk_num = 1;
-    vector < char >U1_q(s[0], 0);
-    vector < char >U2_q(s[1], 0);
-    vector < char >U3_q(s[2], 0);
+    vector < vector < char >>Us_q(n);
+    for (int i = 0; i < n; ++i)
+	Us_q[i] = vector < char >(s[i], 0);
 
     while (left < size) {
 	while (left < size and q < 63) {
@@ -210,9 +220,8 @@ double *compress(string input_file, string compressed_file, string io_type,
 	    double sse = 0;
 	    if (right > left + 1) {
 		if (q > 0) {
-		    for (int i = left; i < right; ++i) { // TODO Can we approximate the error computation?
-			long int quant =
-			    roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
+		    for (int i = left; i < right; ++i) {	// TODO Can we approximate the error computation?
+			long int quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
 			double dequant = quant * (chunk_max - chunk_min) / ((1UL << q) - 1.) + chunk_min;
 			sse += (sorting[i].first - dequant) * (sorting[i].first - dequant);
 		    }
@@ -276,10 +285,17 @@ double *compress(string input_file, string compressed_file, string io_type,
 	    // We use this loop also to store the needed quantization bits per factor column
 	    int x = index % s[0];
 	    int y = index % (s[0] * s[1]) / s[0];
-	    int z = index / (s[0] * s[1]);
-	    U1_q[x] = max(U1_q[x], q);
-	    U2_q[y] = max(U2_q[y], q);
-	    U3_q[z] = max(U3_q[z], q);
+	    Us_q[0][x] = max(Us_q[0][x], q);
+	    Us_q[1][y] = max(Us_q[1][y], q);
+	    if (n == 3) {
+		int z = index / (s[0] * s[1]);
+		Us_q[2][z] = max(Us_q[2][z], q);
+	    } else if (n == 4) {
+		int z = index % (s[0] * s[1] * s[2]) / (s[0] * s[1]);
+		int t = index / (s[0] * s[1] * s[2]);
+		Us_q[2][z] = max(Us_q[2][z], q);
+		Us_q[3][t] = max(Us_q[3][t], q);
+	    }
 	}
 
 	vector < char >mask;
@@ -313,9 +329,7 @@ double *compress(string input_file, string compressed_file, string io_type,
 	    int coeff_bits = 0;
 	    if (q > 0)
 		coeff_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-	    cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min
-		<< ", max=" << chunk_max << ", cbits=" << coeff_bits <<
-		", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+	    cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max << ", cbits=" << coeff_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
 	}
 	// Update control variables
 	q++;
@@ -330,22 +344,17 @@ double *compress(string input_file, string compressed_file, string io_type,
 
     if (debug) {
 	cout << "q's for the factor columns: " << endl;
-	for (int i = 0; i < s[0]; ++i)
-	    cout << " " << int (U1_q[i]);
-	cout << endl;
-	for (int i = 0; i < s[1]; ++i)
-	    cout << " " << int (U2_q[i]);
-	cout << endl;
-	for (int i = 0; i < s[2]; ++i)
-	    cout << " " << int (U3_q[i]);
-	cout << endl;
+	for (int i = 0; i < n; ++i) {
+	    for (int j = 0; j < s[i]; ++j)
+		cout << " " << int (Us_q[i][j]);
+	    cout << endl;
+	}
     }
 
     if (verbose)
 	cout << "Encoding factor matrices... " << flush;
-    encode_factor(U1, s[0], U1_q, output_stream);
-    encode_factor(U2, s[1], U2_q, output_stream);
-    encode_factor(U3, s[2], U3_q, output_stream);
+    for (int i = 0; i < n; ++i)
+	encode_factor(Us[i], s[i], Us_q[i], output_stream);
     if (verbose)
 	cout << "Done" << endl << flush;
 
@@ -379,7 +388,7 @@ double *compress(string input_file, string compressed_file, string io_type,
     delete[]c;
 
     // Finally: write the number of chunks, which we now know
-    output_stream.seekp(13);
+    output_stream.seekp(n * sizeof(int) + 2);
     unsigned char n_chunks = q;
     output_stream.write(reinterpret_cast < char *>(&n_chunks), sizeof(char));
     output_stream.close();
@@ -396,8 +405,7 @@ double *compress(string input_file, string compressed_file, string io_type,
     streampos beginning = bpv_stream.tellg();
     bpv_stream.seekg(0, ios::end);
     long int newbits = (bpv_stream.tellg() - beginning) * 8;
-    cout << "oldbits = " << size * type_size *
-	8L << ", newbits = " << newbits << ", compressionrate = " << size * type_size * 8L / double (newbits)
+    cout << "oldbits = " << size * type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * type_size * 8L / double (newbits)
     << ", bpv = " << newbits / double (size) << endl << flush;
     bpv_stream.close();
 
