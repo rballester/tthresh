@@ -168,7 +168,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (verbose)
 	cout << "Reconstructing tensor... " << flush;
     double *r = c;
-    tucker(r, s, Us, false);
+    hosvd(r, s, Us, false, verbose);
     if (verbose)
 	cout << "Done" << endl << flush;
 

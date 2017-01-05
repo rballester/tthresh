@@ -1,8 +1,8 @@
 # tthresh
 
-##C++ volume compression using the Tucker tensor decomposition##
+##3D and 4D compression using the Tucker tensor decomposition
 
-This is an improved implementation evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
+This is an improved **C++ implementation** evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
 
 ### Download
 
@@ -20,28 +20,21 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 
-### Requirements
-
-You will need:
-
-- Eigen (it will be downloaded as a submodule)
-- tar and gzip (this is used to pack everything together into one final compressed file)
-
 ### Usage
 
-Compression:
+**Compression**:
 
 ```
 ./tthresh -i dataset <options> -c dataset.compressed
 ```
 
-Decompression:
+**Decompression**:
 
 ```
 ./tthresh -c dataset.compressed -o dataset.decompressed
 ```
 
-Compression + decompression (this will print both the bits per value and the achieved accuracy):
+**Compression + decompression** (this will print both the compression rate and the achieved accuracy):
 
 ```
 ./tthresh -i dataset <options> -c dataset.compressed -o dataset.decompressed
@@ -53,9 +46,16 @@ For example, ```./tthresh -i bonsai.raw -c bonsai.compressed -o bonsai.decompres
 
 <img src="https://github.com/rballester/tthresh/tree/master/images/original_vs_reconstructed.png" width="512">
 
-You are free to **use and modify** the code as long as you mention the origin. If you use it for a publication, **please cite the paper**:
+You are free to **use and modify** the code as long as you mention the origin. If you use it for research purposes, **please cite the paper**:
 
 ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
+
+### Requirements
+
+You will need:
+
+- Eigen (it will be downloaded as a submodule)
+- tar and gzip (this is used to pack everything together into one final compressed file)
 
 ### Acknowledgment
 
