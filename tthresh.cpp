@@ -16,7 +16,7 @@ using namespace std;
 void print_usage()
 {
     cout << endl;
-    cout << "tthresh: a compressor for 3D and 4D data sets" << endl;
+    cout << "tthresh: a compressor for 3D and 4D datasets" << endl;
     cout << "Usage: tthresh <options>" << endl;
     cout << endl;
     cout << "\t-h: print this usage information and exit" << endl;
@@ -26,11 +26,15 @@ void print_usage()
     cout << "\t-v: verbose mode; prints main algorithm steps" << endl;
     cout << "\t-d: print debug information" << endl;
     cout << endl;
-    cout << "Compression parameters (needed if -i):" << endl;
+    cout << "Compression parameters (needed with -i):" << endl;
     cout << endl;
     cout << "\t-t <type>: input type (can be \"uchar\", \"int\", \"float\" or \"double\")" << endl;
     cout << "\t-s <x> <y> <z> [<t>]: the data sizes (3 or 4 integers)" << endl;
     cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE or PSNR, respectively)" << endl;
+    cout << endl;
+    cout << "Optional compression parameters:" << endl;
+    cout << endl;
+    cout << "\t-k <n>: skip n leading bytes, for e.g. removing a header (integer)" << endl;
     cout << endl;
 }
 
@@ -61,8 +65,9 @@ int main(int argc, char *argv[])
     Mode mode = none_mode;
     Target target = eps;
     double target_value = -1;
+    unsigned long int skip_bytes = 0;
     vector < int >s;
-    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, verbose_flag = false, debug_flag = false;
+    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;
     string output_file;
@@ -141,6 +146,12 @@ int main(int argc, char *argv[])
                 target_flag = true;
                 target = psnr;
                 continue;
+            case 'k':
+                if (skip_bytes_flag)
+                    display_error("Flag -k already set");
+                mode = skip_bytes_mode;
+                skip_bytes_flag = true;
+                continue;
             case 'v':
                 if (verbose_flag)
                     display_error("Flag -v already set");
@@ -181,6 +192,10 @@ int main(int argc, char *argv[])
             stringstream ss(arg);
             ss >> target_value;
             mode = none_mode;
+        } else if (mode == skip_bytes_mode) {
+            stringstream ss(arg);
+            ss >> skip_bytes;
+            mode = none_mode;
         }
     }
 
@@ -214,12 +229,12 @@ int main(int argc, char *argv[])
 
     double *data = NULL;
     if (input_flag) {
-        data = compress(input_file, compressed_file, io_type, s, target, target_value, verbose_flag, debug_flag);
+        data = compress(input_file, compressed_file, io_type, s, target, target_value, skip_bytes, verbose_flag, debug_flag);
     }
     if (output_flag) {
         decompress(compressed_file, output_file, data, verbose_flag, debug_flag);
     }
-    delete[]data;
+    delete[](data-skip_bytes);
 
     return 0;
 }

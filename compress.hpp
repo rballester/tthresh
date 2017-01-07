@@ -54,7 +54,7 @@ void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstr
         output_stream.write(&matrix_wbyte, sizeof(char));
 }
 
-double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, bool verbose, bool debug)
+double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose, bool debug)
 {
     if (verbose)
         cout << endl << "/***** Compression *****/" << endl << endl << flush;
@@ -67,7 +67,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /**************************/
 
     char n = s.size();
-    long int size = 1;
+    long int size = 1; // Tensor sizes
     for (int i = 0; i < n; ++i)
         size *= s[i];
     char type_size;
@@ -88,6 +88,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Load input file into memory
     /****************************/
     
+    unsigned long int expected_size = skip_bytes + size * type_size;
     char *in = new char[size * type_size];
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
@@ -97,15 +98,18 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     streampos fsize = input_stream.tellg();	// Check that buffer size matches expected size
     input_stream.seekg(0, ios::end);
     fsize = input_stream.tellg() - fsize;
-    if (size * type_size != fsize) {
-        cout << "Invalid file size: expected (" << s[0];
+    if (expected_size != fsize) {
+        cout << "Invalid file size: expected ";
+        if (skip_bytes > 0)
+            cout << skip_bytes << " + ";
+        cout << "(" << s[0];
         for (int i = 1; i < n; ++i)
             cout << "*" << s[i];
-        cout << ") * " << int (type_size) << " = " << size * type_size << " bytes, but found " << fsize << " bytes";
-        if (size * type_size > fsize) {
-            cout << " (" << size * type_size / double (fsize) << " times too small)" << endl;
+        cout << ")*" << int (type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
+        if (expected_size > fsize) {
+            cout << " (" << expected_size / double (fsize) << " times too small)" << endl;
         } else {
-            cout << " (" << fsize / double (size * type_size) << " times too large)" << endl;
+            cout << " (" << fsize / double (expected_size) << " times too large)" << endl;
         }
         exit(1);
     }
@@ -137,18 +141,18 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     double *data;
     double dmin = numeric_limits < double >::max(), dmax = numeric_limits < double >::min(), dnorm = 0;	// Tensor statistics
     if (io_type == "double")
-        data = (double *) in;
+        data = (double *) in + skip_bytes;
     else
         data = new double[size];
     for (int i = 0; i < size; ++i) {
         if (io_type == "uchar") {
-            data[i] = static_cast < unsigned char >(in[i * type_size]);
+            data[i] = static_cast < unsigned char >(in[skip_bytes + i * type_size]);
         } else if (io_type == "int") {
-            data[i] = static_cast < int >(in[i * type_size]);
+            data[i] = static_cast < int >(in[skip_bytes + i * type_size]);
         } else if (io_type == "float") {
-            data[i] = static_cast < float >(in[i * type_size]);
+            data[i] = static_cast < float >(in[skip_bytes + i * type_size]);
         }
-        dmin = min(dmin, data[i]);
+        dmin = min(dmin, data[i]); // Compute statistics, since we're at it
         dmax = max(dmax, data[i]);
         dnorm += data[i] * data[i];
     }
