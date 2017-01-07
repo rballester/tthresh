@@ -80,8 +80,10 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (io_type_code == 0) {
         io_type_size = 1;
     } else if (io_type_code == 1) {
-        io_type_size = 4;
+        io_type_size = 2;
     } else if (io_type_code == 2) {
+        io_type_size = 4;
+    } else if (io_type_code == 3) {
         io_type_size = 4;
     } else {
         io_type_size = 8;
@@ -185,8 +187,10 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         if (io_type_code == 0) {
             reinterpret_cast < unsigned char *>(buffer)[buffer_wpos] = abs(r[i]);
         } else if (io_type_code == 1) {
-            reinterpret_cast < int *>(buffer)[buffer_wpos] = r[i];
+            reinterpret_cast < unsigned short *>(buffer)[buffer_wpos] = r[i];
         } else if (io_type_code == 2) {
+            reinterpret_cast < int *>(buffer)[buffer_wpos] = r[i];
+        } else if (io_type_code == 3) {
             reinterpret_cast < float *>(buffer)[buffer_wpos] = r[i];
         } else {
             reinterpret_cast < double *>(buffer)[buffer_wpos] = r[i];

@@ -28,7 +28,7 @@ void print_usage()
     cout << endl;
     cout << "Compression parameters (needed with -i):" << endl;
     cout << endl;
-    cout << "\t-t <type>: input type (can be \"uchar\", \"int\", \"float\" or \"double\")" << endl;
+    cout << "\t-t <type>: input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
     cout << "\t-s <x> <y> <z> [<t>]: the data sizes (3 or 4 integers)" << endl;
     cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE or PSNR, respectively)" << endl;
     cout << endl;

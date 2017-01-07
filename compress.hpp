@@ -8,11 +8,11 @@ using namespace std;
 using namespace Eigen;
 
 // *** Structure of the compressed file ***
-// (1) 1 byte: number of dimensions N
-// (2) N * 4 bytes: tensor sizes
+// (1) 1 byte: number of dimensions n
+// (2) n * 4 bytes: tensor sizes
 // (3) 1 byte: tensor type
 // (4) 1 byte: number of chunks
-// (5) Chunk information and masks: n_chunks * (chunk_info + compressed mask)
+// (5) Per-chunk information and masks: n_chunks * (chunk_info + compressed mask)
 // (6) Factor matrices
 // (7) The quantized core
 
@@ -38,7 +38,7 @@ void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstr
                                                  (unsigned long int)
                                                  roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
                 to_write |= (U(i, j) < 0) * (1UL << q);	// The sign is the first bit to write
-                for (long int j = q; j >= 0; --j) {
+                for (int j = q; j >= 0; --j) {
                     matrix_wbyte |= ((to_write >> j) & 1UL) << matrix_wbit;
                     matrix_wbit--;
                     if (matrix_wbit < 0) {
@@ -67,12 +67,14 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /**************************/
 
     char n = s.size();
-    long int size = 1; // Tensor sizes
+    unsigned long int size = 1; // Total number of tensor elements
     for (int i = 0; i < n; ++i)
         size *= s[i];
     char type_size;
-    if (io_type == "uchar")
-        type_size = sizeof(char);
+      if (io_type == "uchar")
+	  type_size = sizeof(unsigned char);
+      if (io_type == "ushort")
+	  type_size = sizeof(unsigned short);
     else if (io_type == "int")
         type_size = sizeof(int);
     else if (io_type == "float")
@@ -80,7 +82,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     else if (io_type == "double")
         type_size = sizeof(double);
     else {
-        cout << "Unrecognized I/O type" << endl;
+        cout << "Unrecognized I/O type \"" << io_type << "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"" << endl;
         exit(1);
     }
 
@@ -107,10 +109,14 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             cout << "*" << s[i];
         cout << ")*" << int (type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
         if (expected_size > fsize) {
-            cout << " (" << expected_size / double (fsize) << " times too small)" << endl;
+            cout << " (" << expected_size / double (fsize) << " times too small)";
         } else {
-            cout << " (" << fsize / double (expected_size) << " times too large)" << endl;
+            cout << " (" << fsize / double (expected_size) << " times too large)";
         }
+        if (skip_bytes == 0 and expected_size < fsize and fsize < expected_size + 1000) {
+	    cout << ". Perhaps the file has a header (use flag -k)?";
+	}
+	cout << endl;
         exit(1);
     }
     input_stream.seekg(0, ios::beg);
@@ -128,12 +134,14 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     char io_type_code;
     if (io_type == "uchar")
         io_type_code = 0;
-    else if (io_type == "int")
+    else if (io_type == "ushort")
         io_type_code = 1;
-    else if (io_type == "float")
+    else if (io_type == "int")
         io_type_code = 2;
-    else
+    else if (io_type == "float")
         io_type_code = 3;
+    else
+        io_type_code = 4;
     output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
     output_stream << char (0);	// We don't know the number of chunks yet
     
@@ -147,6 +155,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     for (int i = 0; i < size; ++i) {
         if (io_type == "uchar") {
             data[i] = static_cast < unsigned char >(in[skip_bytes + i * type_size]);
+        } else if (io_type == "ushort") {
+            data[i] = static_cast < unsigned short >(in[skip_bytes + i * type_size]);
         } else if (io_type == "int") {
             data[i] = static_cast < int >(in[skip_bytes + i * type_size]);
         } else if (io_type == "float") {
@@ -205,11 +215,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Generate adaptive chunks from the sorted curve
     /************************************************/
 
-    long int adder = 1;
+    unsigned long int adder = 1;
     char q = 0;
-    long int left = 0;
-    long int old_right = left;	// Inclusive bound
-    long int right = left;	// Exclusive bound
+    unsigned long int left = 0;
+    unsigned long int old_right = left;	// Inclusive bound
+    unsigned long int right = left;	// Exclusive bound
     vector < int >encoding_mask(size, 0);
     int chunk_num = 1;
     vector < vector < char >>Us_q(n);
