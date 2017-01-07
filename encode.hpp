@@ -135,7 +135,7 @@ void encode(vector < char >&contents, vector < char >&encoding)
         codes[frequencies.begin()->first].push_back(false);
 
     /***************************************************************************/
-    // Translate each symbol. Save the code using 24 bits and its length using 8
+    // Translate each symbol. Save the code using 27 bits and its length using 5
     /***************************************************************************/
 
     int n_bits = 0;
@@ -147,7 +147,7 @@ void encode(vector < char >&contents, vector < char >&encoding)
         int cost = it->second.size();
         key_array[counter] = key;
         unsigned int encoding = 0;
-        if (it->second.size() >= 27) {
+        if (it->second.size() > 27) {
             cout << "Encoding too large" << endl;
             exit(1);
         }

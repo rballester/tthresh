@@ -8,13 +8,13 @@ using namespace std;
 using namespace Eigen;
 
 // *** Structure of the compressed file ***
-// 1 byte: number of dimensions N
-// N * 4 bytes: tensor sizes
-// 1 byte: tensor type
-// 1 byte: number of chunks
-// Chunk information and masks: n_chunks * (chunk_info + compressed mask)
-// Factor matrices
-// The quantized core
+// (1) 1 byte: number of dimensions N
+// (2) N * 4 bytes: tensor sizes
+// (3) 1 byte: tensor type
+// (4) 1 byte: number of chunks
+// (5) Chunk information and masks: n_chunks * (chunk_info + compressed mask)
+// (6) Factor matrices
+// (7) The quantized core
 
 void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstream & output_stream)
 {
@@ -101,7 +101,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << "Invalid file size: expected (" << s[0];
         for (int i = 1; i < n; ++i)
             cout << "*" << s[i];
-        cout << ") * " << int (type_size) << " = " << size * type_size << ", but found " << fsize;
+        cout << ") * " << int (type_size) << " = " << size * type_size << " bytes, but found " << fsize << " bytes";
         if (size * type_size > fsize) {
             cout << " (" << size * type_size / double (fsize) << " times too small)" << endl;
         } else {
@@ -168,7 +168,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     else
         sse = pow((dmax - dmin) / (2 * (pow(10, target_value / 20))), 2) * size;
     double lim = sse / size;
-    if (debug)
+    if (verbose)
         cout << "We target MSE = " << lim << endl;
 
     /*********************************/

@@ -16,19 +16,16 @@ void decode(ifstream & chunk_info_stream, unsigned int bytes_to_read, vector < c
     // Read dictionary, encoding size and encoding
     /*********************************************/
 
-    char buffer[bytes_to_read];
+    char *buffer = new char[bytes_to_read];
     chunk_info_stream.read(reinterpret_cast < char *>(buffer), bytes_to_read * sizeof(char));
-    int dict_size = reinterpret_cast < int *>(&buffer[0])[0];
-    int *key_array = reinterpret_cast < int *>(&buffer[0]) + 1;
-    int *code_array = reinterpret_cast < int *>(&buffer[0]) + 1 + dict_size;
-    int n_bits = reinterpret_cast < int *>(&buffer[0])[1 + 2 * dict_size];
-    char *compression = &buffer[(1 + 2 * dict_size + 1) * sizeof(int)];
-    int compression_size = bytes_to_read - (1 + 2 * dict_size + 1) * sizeof(int);
-
-    unordered_map<int,int> tm[27];
+    unsigned int dict_size = reinterpret_cast < unsigned int *>(buffer)[0];
+    unsigned int *key_array = reinterpret_cast < unsigned int *>(buffer) + 1;
+    unsigned int *code_array = reinterpret_cast < unsigned int *>(buffer) + 1 + dict_size;
+    unsigned int n_bits = reinterpret_cast < unsigned int *>(buffer)[1 + 2 * dict_size];
+    unordered_map< unsigned int, unsigned int> tm[27];
     for (int i = 0; i < dict_size; ++i) {
-        int code_len = code_array[i] >> 27;
-        int encoding = code_array[i] & 0x07ffffff;
+        unsigned int code_len = code_array[i] >> 27;
+        unsigned int encoding = code_array[i] & 0x03ffffff;
         tm[code_len][encoding] = key_array[i];
     }
 
@@ -43,9 +40,9 @@ void decode(ifstream & chunk_info_stream, unsigned int bytes_to_read, vector < c
     unsigned char write_byte = 0;
     int write_counter = 7;
     int this_code_len = 0;
-    unordered_map<int,int>::iterator it;
-    for (int i = 0; i < compression_size; ++i) {
-        char c = compression[i];
+    unordered_map< unsigned int, unsigned int>::iterator it;
+    for (int i = (1+2*dict_size+1)*sizeof(int); i < bytes_to_read; ++i) {
+        char c = buffer[i];
         for (int j = 0; j < 8; ++j) {
             if (read_bits == n_bits)
                 break;
@@ -55,7 +52,7 @@ void decode(ifstream & chunk_info_stream, unsigned int bytes_to_read, vector < c
             counter++;
             read_bits++;
 
-            it = tm[this_code_len].find(this_code);
+            it = tm[this_code_len].find(this_code); // See if this corresponds to a symbol
             if (it != tm[this_code_len].end()) {
                 // RLE decoding: put as many bits as the decoded integer indicates
                 for (int k = 0; k < it->second; ++k) {
@@ -76,4 +73,5 @@ void decode(ifstream & chunk_info_stream, unsigned int bytes_to_read, vector < c
     }
     if (write_counter < 7)
         decoded.push_back(write_byte);
+    delete[] buffer;
 }
