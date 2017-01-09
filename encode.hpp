@@ -148,7 +148,7 @@ void encode(vector < char >&contents, vector < char >&encoding)
         key_array[counter] = key;
         unsigned int encoding = 0;
         if (it->second.size() > 27) {
-            cout << "Encoding too large" << endl;
+            cout << "Encoding too large (" << it->second.size() << " bits)" << endl;
             exit(1);
         }
         for (unsigned int i = 0; i < it->second.size(); ++i)

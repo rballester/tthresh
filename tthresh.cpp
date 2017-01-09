@@ -203,7 +203,7 @@ int main(int argc, char *argv[])
         if (input_file == "")
             display_error("Specify a valid input file name");
         if (!io_type_flag)
-            display_error("Specify an IO type (-t)");
+            display_error("Specify an I/O type (-t)");
         if (!sizes_flag or target_value <= 0)
             display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
         if (s.size() < 3)

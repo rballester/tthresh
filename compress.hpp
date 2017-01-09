@@ -70,17 +70,27 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     unsigned long int size = 1; // Total number of tensor elements
     for (int i = 0; i < n; ++i)
         size *= s[i];
-    char type_size;
-      if (io_type == "uchar")
-	  type_size = sizeof(unsigned char);
-      if (io_type == "ushort")
-	  type_size = sizeof(unsigned short);
-    else if (io_type == "int")
-        type_size = sizeof(int);
-    else if (io_type == "float")
-        type_size = sizeof(float);
-    else if (io_type == "double")
-        type_size = sizeof(double);
+    char io_type_size, io_type_code;
+    if (io_type == "uchar") {
+	io_type_size = sizeof(unsigned char);
+	io_type_code = 0;
+    }
+    else if (io_type == "ushort") {
+	io_type_size = sizeof(unsigned short);
+	io_type_code = 1;
+    }
+    else if (io_type == "int") {
+        io_type_size = sizeof(int);
+	io_type_code = 2;
+    }
+    else if (io_type == "float") {
+        io_type_size = sizeof(float);
+	io_type_code = 3;
+    }
+    else if (io_type == "double") {
+        io_type_size = sizeof(double);
+	io_type_code = 4;
+    }
     else {
         cout << "Unrecognized I/O type \"" << io_type << "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"" << endl;
         exit(1);
@@ -90,8 +100,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Load input file into memory
     /****************************/
     
-    unsigned long int expected_size = skip_bytes + size * type_size;
-    char *in = new char[size * type_size];
+    unsigned long int expected_size = skip_bytes + size * io_type_size;
+    char *in = new char[size * io_type_size];
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
         cout << "Could not open \"" << input_file << "\"" << endl;
@@ -107,7 +117,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << "(" << s[0];
         for (int i = 1; i < n; ++i)
             cout << "*" << s[i];
-        cout << ")*" << int (type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
+        cout << ")*" << int (io_type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
         if (expected_size > fsize) {
             cout << " (" << expected_size / double (fsize) << " times too small)";
         } else {
@@ -120,7 +130,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         exit(1);
     }
     input_stream.seekg(0, ios::beg);
-    input_stream.read(in, size * type_size);
+    input_stream.read(in, size * io_type_size);
     input_stream.close();
 
     /****************************/
@@ -130,18 +140,6 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     ofstream output_stream("tthresh-tmp/all", ios::out | ios::binary);
     output_stream << n;		// Number of dimensions
     output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
-
-    char io_type_code;
-    if (io_type == "uchar")
-        io_type_code = 0;
-    else if (io_type == "ushort")
-        io_type_code = 1;
-    else if (io_type == "int")
-        io_type_code = 2;
-    else if (io_type == "float")
-        io_type_code = 3;
-    else
-        io_type_code = 4;
     output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
     output_stream << char (0);	// We don't know the number of chunks yet
     
@@ -153,22 +151,23 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     else
         data = new double[size];
     for (int i = 0; i < size; ++i) {
-        if (io_type == "uchar") {
-            data[i] = static_cast < unsigned char >(in[skip_bytes + i * type_size]);
-        } else if (io_type == "ushort") {
-            data[i] = static_cast < unsigned short >(in[skip_bytes + i * type_size]);
-        } else if (io_type == "int") {
-            data[i] = static_cast < int >(in[skip_bytes + i * type_size]);
-        } else if (io_type == "float") {
-            data[i] = static_cast < float >(in[skip_bytes + i * type_size]);
+        if (io_type_code == 0) {
+	    data[i] = *reinterpret_cast< unsigned char* >(&in[skip_bytes + i * io_type_size]);
+        } else if (io_type_code == 1) {
+	    data[i] = *reinterpret_cast< unsigned short* >(&in[skip_bytes + i * io_type_size]);
+        } else if (io_type_code == 2) {
+	    data[i] = *reinterpret_cast< int* >(&in[skip_bytes + i * io_type_size]);
+        } else if (io_type_code == 3) {
+	    data[i] = *reinterpret_cast< float* >(&in[skip_bytes + i * io_type_size]);
         }
         dmin = min(dmin, data[i]); // Compute statistics, since we're at it
         dmax = max(dmax, data[i]);
         dnorm += data[i] * data[i];
     }
     dnorm = sqrt(dnorm);
-    if (io_type != "double")
+    if (io_type_code != 4)
         delete[]in;
+    if (debug) cout << "Tensor statistics: min = " << dmin << ", max = " << dmax << ", norm = " << dnorm << endl;
 
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric
@@ -340,10 +339,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         std::copy(encoding.begin(), encoding.end(), std::ostreambuf_iterator < char >(output_stream));
 
         if (verbose) {
-            int coeff_bits = 0;
+            int quant_bits = 0;
             if (q > 0)
-                coeff_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-            cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max << ", cbits=" << coeff_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+                quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
+            cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
         // Update control variables
         q++;
@@ -419,7 +418,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     streampos beginning = bpv_stream.tellg();
     bpv_stream.seekg(0, ios::end);
     long int newbits = (bpv_stream.tellg() - beginning) * 8;
-    cout << "oldbits = " << size * type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * type_size * 8L / double (newbits)
+    cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * io_type_size * 8L / double (newbits)
          << ", bpv = " << newbits / double (size) << endl << flush;
     bpv_stream.close();
 
