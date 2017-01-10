@@ -44,7 +44,7 @@ make
 
 The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info the available options, run ```./tthresh -h```.
 
-For example, ```./tthresh -i bonsai.raw -c bonsai.compressed -o bonsai.decompressed -t uchar -s 256 256 256 -r 2``` yields about 1.95 RMSE and 1:25 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
+For example, ```./tthresh -i bonsai.raw -t uchar -s 256 256 256 -r 2 -c bonsai.compressed -o bonsai.decompressed``` yields 1.9988 RMSE and 1:26 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
 
 <img src="https://github.com/rballester/tthresh/tree/master/images/original_vs_reconstructed.png" width="512">
 
