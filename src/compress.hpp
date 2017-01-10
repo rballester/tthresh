@@ -2,6 +2,8 @@
 #include <vector>
 #include "tthresh.hpp"
 #include "tucker.hpp"
+#include "zlib_io.hpp"
+#include <unistd.h>
 #include <Eigen/Dense>
 
 using namespace std;
@@ -59,9 +61,6 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     if (verbose)
         cout << endl << "/***** Compression *****/" << endl << endl << flush;
 
-    int _ = system("mkdir -p tthresh-tmp/");
-    _ = system("rm -f tthresh-tmp/*");
-
     /**************************/
     // Read the input data file
     /**************************/
@@ -72,24 +71,24 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         size *= s[i];
     char io_type_size, io_type_code;
     if (io_type == "uchar") {
-	io_type_size = sizeof(unsigned char);
-	io_type_code = 0;
+        io_type_size = sizeof(unsigned char);
+        io_type_code = 0;
     }
     else if (io_type == "ushort") {
-	io_type_size = sizeof(unsigned short);
-	io_type_code = 1;
+        io_type_size = sizeof(unsigned short);
+        io_type_code = 1;
     }
     else if (io_type == "int") {
         io_type_size = sizeof(int);
-	io_type_code = 2;
+        io_type_code = 2;
     }
     else if (io_type == "float") {
         io_type_size = sizeof(float);
-	io_type_code = 3;
+        io_type_code = 3;
     }
     else if (io_type == "double") {
         io_type_size = sizeof(double);
-	io_type_code = 4;
+        io_type_code = 4;
     }
     else {
         cout << "Unrecognized I/O type \"" << io_type << "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"" << endl;
@@ -124,9 +123,9 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             cout << " (" << fsize / double (expected_size) << " times too large)";
         }
         if (skip_bytes == 0 and expected_size < fsize and fsize < expected_size + 1000) {
-	    cout << ". Perhaps the file has a header (use flag -k)?";
-	}
-	cout << endl;
+            cout << ". Perhaps the file has a header (use flag -k)?";
+        }
+        cout << endl;
         exit(1);
     }
     input_stream.seekg(0, ios::beg);
@@ -137,7 +136,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Save tensor dimensionality, sizes and type
     /****************************/
 
-    ofstream output_stream("tthresh-tmp/all", ios::out | ios::binary);
+    ofstream output_stream("tmp", ios::out | ios::binary);
     output_stream << n;		// Number of dimensions
     output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
     output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
@@ -152,13 +151,13 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         data = new double[size];
     for (int i = 0; i < size; ++i) {
         if (io_type_code == 0) {
-	    data[i] = *reinterpret_cast< unsigned char* >(&in[skip_bytes + i * io_type_size]);
+            data[i] = *reinterpret_cast< unsigned char* >(&in[skip_bytes + i * io_type_size]);
         } else if (io_type_code == 1) {
-	    data[i] = *reinterpret_cast< unsigned short* >(&in[skip_bytes + i * io_type_size]);
+            data[i] = *reinterpret_cast< unsigned short* >(&in[skip_bytes + i * io_type_size]);
         } else if (io_type_code == 2) {
-	    data[i] = *reinterpret_cast< int* >(&in[skip_bytes + i * io_type_size]);
+            data[i] = *reinterpret_cast< int* >(&in[skip_bytes + i * io_type_size]);
         } else if (io_type_code == 3) {
-	    data[i] = *reinterpret_cast< float* >(&in[skip_bytes + i * io_type_size]);
+            data[i] = *reinterpret_cast< float* >(&in[skip_bytes + i * io_type_size]);
         }
         dmin = min(dmin, data[i]); // Compute statistics, since we're at it
         dmax = max(dmax, data[i]);
@@ -410,10 +409,16 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Tar+gzip the final result and compute the bpv
     /***********************************************/
 
-    stringstream ss;
-    ss << "tar -czf " << compressed_file << " " << "tthresh-tmp/";
-    string command(ss.str());
-    _ = system(command.c_str());
+    FILE *source = fopen("tmp", "r");
+    FILE *dest = fopen(compressed_file.c_str(), "w");
+    int ret = def(source, dest, Z_DEFAULT_COMPRESSION);
+    if (ret != Z_OK) {
+      cout << "Error with zlib deflation: code = " << ret << endl;
+      exit(1);
+    }
+    fclose(source);
+    fclose(dest);
+    
     ifstream bpv_stream(compressed_file.c_str(), ios::in | ios::binary);
     streampos beginning = bpv_stream.tellg();
     bpv_stream.seekg(0, ios::end);
@@ -421,6 +426,5 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * io_type_size * 8L / double (newbits)
          << ", bpv = " << newbits / double (size) << endl << flush;
     bpv_stream.close();
-
     return data;
 }

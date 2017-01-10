@@ -1,5 +1,6 @@
 #include "tthresh.hpp"
 #include "tucker.hpp"
+#include "zlib_io.hpp"
 #include <Eigen/Dense>
 
 using namespace std;
@@ -52,15 +53,18 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (verbose)
         cout << endl << "/***** Decompression *****/" << endl << endl << flush;
 
-    int _ = system("rm tthresh-tmp/*");
-
-    stringstream ss;
-    ss << "tar -xf " << compressed_file;
-    string command(ss.str());
-    _ = system(command.c_str());
-
+    FILE *source = fopen(compressed_file.c_str(), "r");
+    FILE *dest = fopen("tmp", "w");
+    int ret = inf(source, dest);
+    if (ret != Z_OK) {
+      cout << "Error with zlib inflation: code = " << ret << endl;
+      exit(1);
+    }
+    fclose(source);
+    fclose(dest);
+    
     // Read output tensor dimensionality, sizes and type
-    ifstream input_stream("tthresh-tmp/all", ios::in | ios::binary);
+    ifstream input_stream("tmp", ios::in | ios::binary);
     char n;
     input_stream.read(reinterpret_cast < char *>(&n), sizeof(char));
     vector < int >s(n);
@@ -176,9 +180,9 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << "Done" << endl << flush;
 
     ofstream output_stream(output_file.c_str(), ios::out | ios::binary);
-    long int buf_elems = 1 << 20;
+    unsigned long int buf_elems = 1 << 20;
     char *buffer = new char[io_type_size * buf_elems];
-    long int buffer_wpos = 0;
+    unsigned long int buffer_wpos = 0;
     double sse = 0;
     double input_norm = 0;
     double input_min = std::numeric_limits < double >::max();

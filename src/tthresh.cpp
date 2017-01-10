@@ -57,7 +57,6 @@ bool is_number(string & s)
 
 int main(int argc, char *argv[])
 {
-
     /************************************/
     // Check and process all arguments...
     /************************************/
