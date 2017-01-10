@@ -83,7 +83,6 @@ int def(FILE *source, FILE *dest, int level)
 
     /* clean up and return */
     (void)deflateEnd(&strm);
-    cout << "DEF WENT WELL" << endl;
     return Z_OK;
 }
 
@@ -148,7 +147,6 @@ int inf(FILE *source, FILE *dest)
 
     /* clean up and return */
     (void)inflateEnd(&strm);
-    cout << "NOW is " << ret << " " << Z_STREAM_END << endl;
     return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
 }
 
