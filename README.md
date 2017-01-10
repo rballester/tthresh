@@ -7,8 +7,10 @@ This is an improved **C++ implementation** evolved from the thresholding compres
 ### Download
 
 ```  
-git clone --recursive https://github.com/rballester/tthresh.git
+git clone https://github.com/rballester/tthresh.git
 ```
+
+or as a [zip file](https://github.com/rballester/tthresh/archive/master.zip).
 
 ### Compilation
 
@@ -25,19 +27,19 @@ make
 **Compression**:
 
 ```
-./tthresh -i dataset <options> -c dataset.compressed
+./tthresh -i <dataset> <options> -c <compressed dataset>
 ```
 
 **Decompression**:
 
 ```
-./tthresh -c dataset.compressed -o dataset.decompressed
+./tthresh -c <compressed dataset> -o <decompressed dataset>
 ```
 
 **Compression + decompression** (this will print both the compression rate and the achieved accuracy):
 
 ```
-./tthresh -i dataset <options> -c dataset.compressed -o dataset.decompressed
+./tthresh -i dataset <options> -c <compressed dataset> -o <decompressed dataset>
 ```
 
 The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info the available options, run ```./tthresh -h```.
@@ -49,13 +51,6 @@ For example, ```./tthresh -i bonsai.raw -c bonsai.compressed -o bonsai.decompres
 You are free to **use and modify** the code as long as you mention the origin. If you use it for research purposes, **please cite the paper**:
 
 ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
-
-### Requirements
-
-You will need:
-
-- Eigen (it will be downloaded as a submodule)
-- tar and gzip (this is used to pack everything together into one final compressed file)
 
 ### Acknowledgment
 
