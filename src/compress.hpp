@@ -168,6 +168,12 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         delete[]in;
     if (debug) cout << "Tensor statistics: min = " << dmin << ", max = " << dmax << ", norm = " << dnorm << endl;
 
+    // Compute the cumulative products (useful later on for index computations)
+    vector<unsigned long int> sprod(n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    sprod[0] = 1;
+    for (int dim = 0; dim < n; ++dim)
+        sprod[dim+1] = sprod[dim]*s[dim];
+
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric
     /**********************************************************************/
@@ -292,21 +298,12 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         /********************************************/
 
         for (int i = left; i < right; ++i) {
-            long int index = sorting[i].second;
+            unsigned long int index = sorting[i].second;
             encoding_mask[index] = chunk_num;
-            // We use this loop also to store the needed quantization bits per factor column
-            int x = index % s[0];
-            int y = index % (s[0] * s[1]) / s[0];
-            Us_q[0][x] = max(Us_q[0][x], q);
-            Us_q[1][y] = max(Us_q[1][y], q);
-            if (n == 3) {
-                int z = index / (s[0] * s[1]);
-                Us_q[2][z] = max(Us_q[2][z], q);
-            } else if (n == 4) {
-                int z = index % (s[0] * s[1] * s[2]) / (s[0] * s[1]);
-                int t = index / (s[0] * s[1] * s[2]);
-                Us_q[2][z] = max(Us_q[2][z], q);
-                Us_q[3][t] = max(Us_q[3][t], q);
+            // We use this loop also to update the needed quantization bits per factor column
+            for (int dim = 0; dim < n; ++dim) {
+                int coord = index % sprod[dim+1] / sprod[dim];
+                Us_q[dim][coord] = max(Us_q[dim][coord], q);
             }
         }
 

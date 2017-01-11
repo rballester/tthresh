@@ -184,9 +184,6 @@ int main(int argc, char *argv[])
             if (next_size <= 0)
                 display_error("Size arguments must be positive integers");
             s.push_back(next_size);
-            if (s.size() == 4) {
-                mode = none_mode;
-            }
         } else if (mode == target_mode) {
             stringstream ss(arg);
             ss >> target_value;
@@ -206,7 +203,7 @@ int main(int argc, char *argv[])
         if (!sizes_flag or target_value <= 0)
             display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
         if (s.size() < 3)
-            display_error("Specify 3 or 4 integer sizes after -s");
+            display_error("Specify 3 or more integer sizes after -s");
     }
 
     if (!compressed_flag or compressed_file == "")

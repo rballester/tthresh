@@ -150,4 +150,4 @@ int inf(FILE *source, FILE *dest)
     return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
 }
 
-#endif // ZLIB_IO
+#endif // ZLIB_IO_HPP
