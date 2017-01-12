@@ -6,7 +6,7 @@
 using namespace std;
 using namespace Eigen;
 
-// Projects a core M into M_proj using the transformation matrix U.
+// Projects an unfolded core M into M_proj using the transformation matrix U.
 // If compress == true, U is an output parameter, computed as the HOSVD of
 // the tensor (left singular vectors of M) and M is compressed using U.transpose().
 // If compress == false, U is an input parameter and M is decompressed using U.

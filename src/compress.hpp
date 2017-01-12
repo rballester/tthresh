@@ -21,7 +21,7 @@ using namespace Eigen;
 void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstream & output_stream)
 {
     // First, the matrix's maximum, used for quantization
-    double maximum = U.maxCoeff();
+    double maximum = U.array().abs().maxCoeff();
     output_stream.write(reinterpret_cast < char *>(&maximum), sizeof(double));
 
     // Next, the q for each column
@@ -279,10 +279,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         // Quantize (in-place) the core elements
         /********************************************/
 
-        for (int i = left; i < right; ++i) {
-            // If q = 0 there's no need to store anything quantized, not even the sign
-            // If q = 63, values are kept as they are and we forget about quantization
-            if (q > 0 and q < 63) {
+        // If q = 0 there's no need to store anything quantized, not even the sign
+        // If q = 63, values are kept as they are and we forget about quantization
+        if (q > 0 and q < 63) {
+            for (int i = left; i < right; ++i) {
                 unsigned long int to_write = 0;
                 if (chunk_size > 1)
                     // The following min() prevents overflowing the q-bit representation when converting double -> long int

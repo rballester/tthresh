@@ -112,13 +112,8 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (ind < size and encoding_mask[ind] > 0) // Skip core elements already assigned to a previous chunk
                     ind++;
-                if ((decoded[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
-                                                if (ind >= size) {
-                                                    cerr << "ERRORRRRRRRRRRRRRRRRRR" << endl;
-                                                    exit(1);
-                                                }
+                if ((decoded[i] >> chunk_rbit) & 1) // If element "ind" belongs to the current chunk
                     encoding_mask[ind] = chunk_num;
-                }
                 ind++;
             }
         }
