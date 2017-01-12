@@ -1,8 +1,8 @@
 # tthresh
 
-##3D and 4D compression using the Tucker tensor decomposition
+## Multidimensional Compression Using the Tucker Tensor Decomposition
 
-This is an improved **C++ implementation** evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
+This is an improved **C++ implementation** evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html). This compressor works for **3 dimensions and above**. For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
 
 ### Download
 
@@ -10,7 +10,7 @@ This is an improved **C++ implementation** evolved from the thresholding compres
 git clone https://github.com/rballester/tthresh.git
 ```
 
-or as a [zip file](https://github.com/rballester/tthresh/archive/master.zip).
+(or as a [zip file](https://github.com/rballester/tthresh/archive/master.zip)).
 
 ### Compilation
 
@@ -42,7 +42,7 @@ make
 ./tthresh -i dataset <options> -c <compressed dataset> -o <decompressed dataset>
 ```
 
-The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info the available options, run ```./tthresh -h```.
+The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info on the available options, run ```./tthresh -h```.
 
 For example, ```./tthresh -i bonsai.raw -t uchar -s 256 256 256 -r 2 -c bonsai.compressed -o bonsai.decompressed``` yields 1.9988 RMSE and 1:26 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
 
@@ -54,7 +54,7 @@ You are free to **use and modify** the code as long as you mention the origin. I
 
 ### Acknowledgment
 
-Special thanks to [Peter G. Lindstrom](http://people.llnl.gov/pl), author of the [zip and fpzip compressors](http://computation.llnl.gov/projects/floating-point-compression), for sparking fruitful discussions and ideas on how to improve the Tucker compressor.
+Special thanks to [Peter G. Lindstrom](http://people.llnl.gov/pl), author of the [zfp and fpzip compressors](http://computation.llnl.gov/projects/floating-point-compression), for sparking fruitful discussions and ideas on how to improve the Tucker compressor.
 
 ### Why Tucker?
 
