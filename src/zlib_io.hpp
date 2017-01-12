@@ -1,7 +1,7 @@
 #ifndef __ZLIB_IO_HPP__
 #define __ZLIB_IO_HPP__
 
-/* Taken from zpipe.c: example of proper use of zlib's inflate() and deflate()
+/* Parts are taken from zpipe.c (example of proper use of zlib's inflate() and deflate())
    Not copyrighted -- provided to the public domain
    Version 1.4  11 December 2005  Mark Adler */
 
@@ -29,6 +29,76 @@
 #endif
 
 #define CHUNK (1<<18)
+
+int min(int a, int b) {
+    if (a < b) return a;
+    return b;
+}
+
+struct {
+    FILE *dest;
+    unsigned char zlib_buf[CHUNK];
+    int zlib_bufsize = 0; // How many elements are there in the buffer right now
+    int ret;
+    z_stream strm;
+    unsigned char out[CHUNK];
+} zs; // I/O state
+
+int deflate_chunk(unsigned long int bytes_to_write, int flush)
+{
+    zs.strm.avail_in = bytes_to_write;
+    zs.strm.next_in = zs.zlib_buf;
+
+    unsigned have;
+    do {
+        zs.strm.avail_out = CHUNK;
+        zs.strm.next_out = zs.out;
+        zs.ret = deflate(&(zs.strm), flush);    /* no bad return value */
+        assert(zs.ret != Z_STREAM_ERROR);  /* state not clobbered */
+        have = CHUNK - zs.strm.avail_out;
+        if (fwrite(zs.out, 1, have, zs.dest) != have || ferror(zs.dest)) {
+            (void)deflateEnd(&(zs.strm));
+            return Z_ERRNO;
+        }
+    } while (zs.strm.avail_out == 0);
+    assert(zs.strm.avail_in == 0);     /* all input will be used */
+}
+
+int open_zlib_write_stream(string output_file)
+{
+    zs.dest = fopen(output_file.c_str(), "w");
+
+    /* allocate deflate state */
+    zs.strm.zalloc = Z_NULL;
+    zs.strm.zfree = Z_NULL;
+    zs.strm.opaque = Z_NULL;
+    zs.ret = deflateInit(&(zs.strm), Z_DEFAULT_COMPRESSION);
+    return zs.ret;
+}
+
+int write_zlib_stream(unsigned char *buf, unsigned long int bytes_to_write)
+{
+    while (bytes_to_write > 0) {
+        unsigned long int to_copy = min(bytes_to_write, CHUNK-zs.zlib_bufsize);
+        memcpy(zs.zlib_buf + zs.zlib_bufsize, buf, to_copy);
+        zs.zlib_bufsize += to_copy;
+        buf += to_copy;
+        bytes_to_write -= to_copy;
+        if (zs.zlib_bufsize == CHUNK) { // The buffer is full
+            deflate_chunk(CHUNK, Z_NO_FLUSH);
+            zs.zlib_bufsize = 0; // Empty the buffer
+        }
+    }
+}
+
+int close_zlib_write_stream() {
+    deflate_chunk(zs.zlib_bufsize, Z_FINISH);
+    assert(zs.ret == Z_STREAM_END);        /* stream will be complete */
+    /* clean up and return */
+    (void)deflateEnd(&(zs.strm));
+    fclose(zs.dest);
+    return Z_OK;
+}
 
 /* Compress from file source to file dest until EOF on source.
    def() returns Z_OK on success, Z_MEM_ERROR if memory could not be

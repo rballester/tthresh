@@ -18,15 +18,18 @@ using namespace Eigen;
 // (6) Factor matrices
 // (7) The quantized core
 
-void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstream & output_stream)
+void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q)
 {
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
-    output_stream.write(reinterpret_cast < char *>(&maximum), sizeof(double));
+//    output_stream.write(reinterpret_cast < char *>(&maximum), sizeof(double));
+    write_zlib_stream(reinterpret_cast< unsigned char *> (&maximum), sizeof(double));
 
     // Next, the q for each column
-    for (int i = 0; i < n_columns; ++i)
-        output_stream.write(reinterpret_cast < char *>(&columns_q[i]), sizeof(char));
+    for (int i = 0; i < n_columns; ++i) {
+//        output_stream.write(reinterpret_cast < char *>(&columns_q[i]), sizeof(char));
+        write_zlib_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(char));
+    }
 
     // Finally the matrix itself, quantized
     char matrix_wbyte = 0;
@@ -45,15 +48,18 @@ void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q, ofstr
                     matrix_wbit--;
                     if (matrix_wbit < 0) {
                         matrix_wbit = 7;
-                        output_stream.write(&matrix_wbyte, sizeof(char));
+//                        output_stream.write(&matrix_wbyte, sizeof(char));
+                        write_zlib_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(char));
                         matrix_wbyte = 0;
                     }
                 }
             }
         }
     }
-    if (matrix_wbit < 7)
-        output_stream.write(&matrix_wbyte, sizeof(char));
+    if (matrix_wbit < 7) {
+//        output_stream.write(&matrix_wbyte, sizeof(char));
+        write_zlib_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(char));
+    }
 }
 
 double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose, bool debug)
@@ -65,7 +71,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Read the input data file
     /**************************/
 
-    char n = s.size();
+    unsigned char n = s.size();
     unsigned long int size = 1; // Total number of tensor elements
     for (int i = 0; i < n; ++i)
         size *= s[i];
@@ -136,12 +142,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Save tensor dimensionality, sizes and type
     /****************************/
 
-    ofstream output_stream("tmp", ios::out | ios::binary);
-    output_stream << n;		// Number of dimensions
-    output_stream.write(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
-    output_stream.write(reinterpret_cast < char *>(&io_type_code), sizeof(char));
-    output_stream << char (0);	// We don't know the number of chunks yet
-    
+    open_zlib_write_stream(compressed_file.c_str());
+    write_zlib_stream(reinterpret_cast < unsigned char *> (&n), sizeof(char));
+    write_zlib_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(int));
+    write_zlib_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(char));
+
     // Cast the tensor to doubles
     double *data;
     double dmin = numeric_limits < double >::max(), dmax = numeric_limits < double >::min(), dnorm = 0;	// Tensor statistics
@@ -331,8 +336,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         ci.compressed_size = encoding.size();
         ci.minimum = chunk_min;
         ci.maximum = chunk_max;
-        output_stream.write(reinterpret_cast < char *>(&ci), sizeof(chunk_info));
-        std::copy(encoding.begin(), encoding.end(), std::ostreambuf_iterator < char >(output_stream));
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&ci), sizeof(chunk_info));
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&encoding[0]), encoding.size()*sizeof(char));
 
         if (verbose) {
             int quant_bits = 0;
@@ -340,6 +345,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                 quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
             cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
+
         // Update control variables
         q++;
         left = right;
@@ -363,7 +369,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     if (verbose)
         cout << "Encoding factor matrices... " << flush;
     for (int i = 0; i < n; ++i)
-        encode_factor(Us[i], s[i], Us_q[i], output_stream);
+        encode_factor(Us[i], s[i], Us_q[i]);
     if (verbose)
         cout << "Done" << endl << flush;
 
@@ -373,48 +379,52 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         cout << "Saving core encoding... " << flush;
-    char core_quant_wbyte = 0;
-    char core_quant_wbit = 7;
+    unsigned long int core_quant_w = 0;
+    char core_quant_wbit = 63;
+//    vector<char> buf;
     for (int i = 0; i < size; ++i) {
         chunk_num = encoding_mask[i];
         char q = chunk_num - 1;
         if (q > 0) {
             for (long int j = q; j >= 0; --j) {
-                core_quant_wbyte |= ((static_cast < unsigned long int >(c[i]) >> j) &1UL) << core_quant_wbit;
+                core_quant_w |= ((static_cast < unsigned long int >(c[i]) >> j) &1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
-                    output_stream.write(&core_quant_wbyte, sizeof(char));
-                    core_quant_wbyte = 0;
-                    core_quant_wbit = 7;
+//                    output_stream.write(&core_quant_wbyte, sizeof(char));
+//                    buf.push_back(core_quant_wbyte);
+                    write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_w), sizeof(unsigned long int));
+                    core_quant_w = 0;
+                    core_quant_wbit = 63;
                 }
             }
         }
     }
-    if (core_quant_wbit < 7)
-        output_stream.write(&core_quant_wbyte, sizeof(char));
+    if (core_quant_wbit < 63) {
+//        output_stream.write(&core_quant_wbyte, sizeof(char));
+//        buf.push_back(core_quant_wbyte);
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_w), (63-core_quant_wbit)/8 * sizeof(char));
+    }
+//    cerr << "pushin " << buf.size()*sizeof(char) << endl;
+//    write_zlib_stream(reinterpret_cast < unsigned char *> (&buf[0]), buf.size()*sizeof(char));
     if (verbose)
         cout << "Done" << endl << flush;
     delete[]c;
-
-    // Finally: write the number of chunks, which we now know
-    output_stream.seekp(n * sizeof(int) + 2);
-    unsigned char n_chunks = q;
-    output_stream.write(reinterpret_cast < char *>(&n_chunks), sizeof(char));
-    output_stream.close();
+//    output_stream.close();
+    close_zlib_write_stream();
 
     /***********************************************/
-    // Tar+gzip the final result and compute the bpv
+    // Compute statistics of the resulting compression rate
     /***********************************************/
 
-    FILE *source = fopen("tmp", "r");
-    FILE *dest = fopen(compressed_file.c_str(), "w");
-    int ret = def(source, dest, Z_DEFAULT_COMPRESSION);
-    if (ret != Z_OK) {
-      cout << "Error with zlib deflation: code = " << ret << endl;
-      exit(1);
-    }
-    fclose(source);
-    fclose(dest);
+//    FILE *source = fopen("tmp", "r");
+//    FILE *dest = fopen(compressed_file.c_str(), "w");
+//    int ret = def(source, dest, Z_DEFAULT_COMPRESSION);
+//    if (ret != Z_OK) {
+//      cout << "Error with zlib deflation: code = " << ret << endl;
+//      exit(1);
+//    }
+//    fclose(source);
+//    fclose(dest);
     
     ifstream bpv_stream(compressed_file.c_str(), ios::in | ios::binary);
     streampos beginning = bpv_stream.tellg();

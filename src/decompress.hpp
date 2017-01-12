@@ -92,34 +92,37 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     } else {
         io_type_size = 8;
     }
-    unsigned char n_chunks;
-    input_stream.read(reinterpret_cast < char *>(&n_chunks), sizeof(char));
-    double minimums[n_chunks];
-    double maximums[n_chunks];
+    vector<double> minimums;
+    vector<double> maximums;
 
     vector < int >encoding_mask(size, 0);
-    for (int chunk_num = 1; chunk_num <= n_chunks; ++chunk_num) {
-
+    int chunk_num = 1;
+    unsigned long int assigned = 0;
+    while(assigned < size) {
         chunk_info ci;
         input_stream.read(reinterpret_cast < char *>(&ci), sizeof(chunk_info));
-        minimums[chunk_num - 1] = ci.minimum;
-        maximums[chunk_num - 1] = ci.maximum;
+        minimums.push_back(ci.minimum);
+        maximums.push_back(ci.maximum);
 
         vector < char >decoded;
         decode(input_stream, ci.compressed_size, decoded);
-        long int ind = 0;
+        unsigned long int ind = 0;
         for (unsigned int i = 0; i < decoded.size() and ind < size; ++i) {	// This can be more efficient...
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (ind < size and encoding_mask[ind] > 0) // Skip core elements already assigned to a previous chunk
                     ind++;
-                if ((decoded[i] >> chunk_rbit) & 1) // If element "ind" belongs to the current chunk
+                if ((decoded[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
                     encoding_mask[ind] = chunk_num;
+                    ++assigned;
+                }
                 ind++;
             }
         }
         if (verbose)
             cout << "Decoded chunk " << chunk_num << ", mask has " << decoded.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
+        ++chunk_num;
     }
+    cerr << "ASSIGNED=" << assigned << ", SIZE=" << size << endl;
     // Read factor matrices
     if (verbose)
         cout << "Decoding factor matrices... " << flush;
