@@ -379,30 +379,30 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         cout << "Saving core encoding... " << flush;
-    unsigned long int core_quant_w = 0;
-    char core_quant_wbit = 63;
+    unsigned char core_quant_wbyte = 0;
+    char core_quant_wbit = 7;
 //    vector<char> buf;
     for (int i = 0; i < size; ++i) {
         chunk_num = encoding_mask[i];
         char q = chunk_num - 1;
         if (q > 0) {
             for (long int j = q; j >= 0; --j) {
-                core_quant_w |= ((static_cast < unsigned long int >(c[i]) >> j) &1UL) << core_quant_wbit;
+                core_quant_wbyte |= ((static_cast < unsigned long int >(c[i]) >> j) &1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
 //                    output_stream.write(&core_quant_wbyte, sizeof(char));
 //                    buf.push_back(core_quant_wbyte);
-                    write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_w), sizeof(unsigned long int));
-                    core_quant_w = 0;
-                    core_quant_wbit = 63;
+                    write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+                    core_quant_wbyte = 0;
+                    core_quant_wbit = 7;
                 }
             }
         }
     }
-    if (core_quant_wbit < 63) {
+    if (core_quant_wbit < 7) {
 //        output_stream.write(&core_quant_wbyte, sizeof(char));
 //        buf.push_back(core_quant_wbyte);
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_w), (63-core_quant_wbit)/8 * sizeof(char));
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
     }
 //    cerr << "pushin " << buf.size()*sizeof(char) << endl;
 //    write_zlib_stream(reinterpret_cast < unsigned char *> (&buf[0]), buf.size()*sizeof(char));

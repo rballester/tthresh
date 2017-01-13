@@ -36,7 +36,7 @@ int min(int a, int b) {
 }
 
 struct {
-    FILE *dest;
+    FILE *source, *dest;
     unsigned char zlib_buf[CHUNK];
     int zlib_bufsize = 0; // How many elements are there in the buffer right now
     int ret;
@@ -67,8 +67,6 @@ int deflate_chunk(unsigned long int bytes_to_write, int flush)
 int open_zlib_write_stream(string output_file)
 {
     zs.dest = fopen(output_file.c_str(), "w");
-
-    /* allocate deflate state */
     zs.strm.zalloc = Z_NULL;
     zs.strm.zfree = Z_NULL;
     zs.strm.opaque = Z_NULL;
@@ -98,6 +96,16 @@ int close_zlib_write_stream() {
     (void)deflateEnd(&(zs.strm));
     fclose(zs.dest);
     return Z_OK;
+}
+
+int open_zlib_write_stream(string output_file)
+{
+    zs.dest = fopen(output_file.c_str(), "w");
+    zs.strm.zalloc = Z_NULL;
+    zs.strm.zfree = Z_NULL;
+    zs.strm.opaque = Z_NULL;
+    zs.ret = deflateInit(&(zs.strm), Z_DEFAULT_COMPRESSION);
+    return zs.ret;
 }
 
 /* Compress from file source to file dest until EOF on source.
@@ -154,6 +162,20 @@ int def(FILE *source, FILE *dest, int level)
     /* clean up and return */
     (void)deflateEnd(&strm);
     return Z_OK;
+}
+
+int open_zlib_read_stream(string input_file)
+{
+    zs.dest = fopen(input_file.c_str(), "r");
+    /* allocate inflate state */
+    zs.strm.zalloc = Z_NULL;
+    zs.strm.zfree = Z_NULL;
+    zs.strm.opaque = Z_NULL;
+    zs.strm.avail_in = 0;
+    zs.strm.next_in = Z_NULL;
+    zs.ret = inflateInit(&strm);
+    if (zs.ret != Z_OK)
+        return zs.ret;
 }
 
 /* Decompress from file source to file dest until stream ends or EOF.
