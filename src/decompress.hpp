@@ -103,15 +103,16 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         input_stream.read(reinterpret_cast < char *>(&ci), sizeof(chunk_info));
         minimums.push_back(ci.minimum);
         maximums.push_back(ci.maximum);
-
-        vector < char >decoded;
-        decode(input_stream, ci.compressed_size, decoded);
+        vector < char >mask;
+	
+        decode(input_stream, ci.compressed_size, mask);
+	
         unsigned long int ind = 0;
-        for (unsigned int i = 0; i < decoded.size() and ind < size; ++i) {	// This can be more efficient...
+        for (unsigned int i = 0; i < mask.size() and ind < size; ++i) {	// TODO: sum directly
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (ind < size and encoding_mask[ind] > 0) // Skip core elements already assigned to a previous chunk
                     ind++;
-                if ((decoded[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
+                if ((mask[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
                     encoding_mask[ind] = chunk_num;
                     ++assigned;
                 }
@@ -119,10 +120,10 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             }
         }
         if (verbose)
-            cout << "Decoded chunk " << chunk_num << ", mask has " << decoded.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
+            cout << "Decoded chunk " << chunk_num << ", compressed_size is " << ci.compressed_size << ", mask has " << mask.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
         ++chunk_num;
     }
-    cerr << "ASSIGNED=" << assigned << ", SIZE=" << size << endl;
+    
     // Read factor matrices
     if (verbose)
         cout << "Decoding factor matrices... " << flush;
@@ -131,6 +132,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         decode_factor(Us[i], s[i], input_stream);
     if (verbose)
         cout << "Done" << endl << flush;
+    
     // Recover the quantized core (i.e. read all remaining data) and dequantize it
     double *c = new double[size];
     std::vector < char >core_quant_buffer((istreambuf_iterator < char >(input_stream)), istreambuf_iterator < char >());

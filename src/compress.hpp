@@ -68,7 +68,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << endl << "/***** Compression *****/" << endl << endl << flush;
 
     /**************************/
-    // Read the input data file
+    // Check input data type
     /**************************/
 
     unsigned char n = s.size();
@@ -100,13 +100,12 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << "Unrecognized I/O type \"" << io_type << "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"" << endl;
         exit(1);
     }
-
-    /****************************/
-    // Load input file into memory
-    /****************************/
     
+    /******************/
+    // Check file sizes
+    /******************/
+
     unsigned long int expected_size = skip_bytes + size * io_type_size;
-    char *in = new char[size * io_type_size];
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
         cout << "Could not open \"" << input_file << "\"" << endl;
@@ -134,18 +133,24 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << endl;
         exit(1);
     }
-    input_stream.seekg(0, ios::beg);
-    input_stream.read(in, size * io_type_size);
-    input_stream.close();
 
-    /****************************/
+    /********************************************/
     // Save tensor dimensionality, sizes and type
-    /****************************/
+    /********************************************/
 
     open_zlib_write_stream(compressed_file.c_str());
     write_zlib_stream(reinterpret_cast < unsigned char *> (&n), sizeof(char));
     write_zlib_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(int));
     write_zlib_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(char));
+
+    /*****************************/
+    // Load input file into memory
+    /*****************************/
+
+    input_stream.seekg(0, ios::beg);
+    char *in = new char[size * io_type_size];
+    input_stream.read(in, size * io_type_size);
+    input_stream.close();
 
     // Cast the tensor to doubles
     double *data;
@@ -229,12 +234,12 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     unsigned long int left = 0;
     unsigned long int old_right = left;	// Inclusive bound
     unsigned long int right = left;	// Exclusive bound
-    vector < int >encoding_mask(size, 0);
+    vector < int >chunk_ids(size, 0);
     int chunk_num = 1;
     vector < vector < char >>Us_q(n);
     for (int i = 0; i < n; ++i)
         Us_q[i] = vector < char >(s[i], 0);
-
+                                    int assigned = 0;
     while (left < size) {
         while (left < size and q < 63) {
             right = min(size, old_right + adder);
@@ -304,7 +309,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
         for (int i = left; i < right; ++i) {
             unsigned long int index = sorting[i].second;
-            encoding_mask[index] = chunk_num;
+            chunk_ids[index] = chunk_num;
+                                                                                    assigned++;
             // We use this loop also to update the needed quantization bits per factor column
             for (int dim = 0; dim < n; ++dim) {
                 int coord = index % sprod[dim+1] / sprod[dim];
@@ -316,9 +322,9 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         char mask_wbyte = 0;
         char mask_wbit = 7;
         for (int i = 0; i < size; ++i) {
-            if (encoding_mask[i] == 0)
+            if (chunk_ids[i] == 0)
                 mask_wbit--;
-            else if (encoding_mask[i] == chunk_num) {
+            else if (chunk_ids[i] == chunk_num) {
                 mask_wbyte |= 1 << mask_wbit;
                 mask_wbit--;
             }
@@ -330,20 +336,21 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         }
         if (mask_wbit < 7)
             mask.push_back(mask_wbyte);
-        vector < char >encoding;
-        encode(mask, encoding);
+        vector < char >compressed_mask;
+        encode(mask, compressed_mask); // TODO: make encode() write directly into the zlib stream
+
         chunk_info ci;
-        ci.compressed_size = encoding.size();
+        ci.compressed_size = compressed_mask.size();
         ci.minimum = chunk_min;
         ci.maximum = chunk_max;
         write_zlib_stream(reinterpret_cast < unsigned char *> (&ci), sizeof(chunk_info));
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&encoding[0]), encoding.size()*sizeof(char));
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&compressed_mask[0]), compressed_mask.size()*sizeof(char));
 
         if (verbose) {
             int quant_bits = 0;
             if (q > 0)
                 quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-            cout << "Encoded chunk " << chunk_num << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+            cout << "Encoded chunk " << chunk_num << ", compressed_size=" << ci.compressed_size << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
 
         // Update control variables
@@ -378,12 +385,12 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /********************************************/
 
     if (verbose)
-        cout << "Saving core encoding... " << flush;
+        cout << "Saving core quantization... " << flush;
     unsigned char core_quant_wbyte = 0;
     char core_quant_wbit = 7;
 //    vector<char> buf;
     for (int i = 0; i < size; ++i) {
-        chunk_num = encoding_mask[i];
+        chunk_num = chunk_ids[i];
         char q = chunk_num - 1;
         if (q > 0) {
             for (long int j = q; j >= 0; --j) {
@@ -402,29 +409,20 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     if (core_quant_wbit < 7) {
 //        output_stream.write(&core_quant_wbyte, sizeof(char));
 //        buf.push_back(core_quant_wbyte);
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+        int ret = write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+        assert(ret == Z_OK);
     }
-//    cerr << "pushin " << buf.size()*sizeof(char) << endl;
 //    write_zlib_stream(reinterpret_cast < unsigned char *> (&buf[0]), buf.size()*sizeof(char));
     if (verbose)
         cout << "Done" << endl << flush;
     delete[]c;
 //    output_stream.close();
-    close_zlib_write_stream();
+    int ret = close_zlib_write_stream();
+    assert(ret == Z_OK);
 
     /***********************************************/
     // Compute statistics of the resulting compression rate
     /***********************************************/
-
-//    FILE *source = fopen("tmp", "r");
-//    FILE *dest = fopen(compressed_file.c_str(), "w");
-//    int ret = def(source, dest, Z_DEFAULT_COMPRESSION);
-//    if (ret != Z_OK) {
-//      cout << "Error with zlib deflation: code = " << ret << endl;
-//      exit(1);
-//    }
-//    fclose(source);
-//    fclose(dest);
     
     ifstream bpv_stream(compressed_file.c_str(), ios::in | ios::binary);
     streampos beginning = bpv_stream.tellg();

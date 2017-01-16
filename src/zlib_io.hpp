@@ -20,6 +20,7 @@
 #include <assert.h>
 #include "zlib.h"
 
+// Avoids corruption of the input and output data on Windows/MS-DOS systems
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
 #  include <io.h>
@@ -66,6 +67,7 @@ int deflate_chunk(unsigned long int bytes_to_write, int flush)
 
 int open_zlib_write_stream(string output_file)
 {
+    SET_BINARY_MODE(output_file.c_str());
     zs.dest = fopen(output_file.c_str(), "w");
     zs.strm.zalloc = Z_NULL;
     zs.strm.zfree = Z_NULL;
@@ -96,16 +98,6 @@ int close_zlib_write_stream() {
     (void)deflateEnd(&(zs.strm));
     fclose(zs.dest);
     return Z_OK;
-}
-
-int open_zlib_write_stream(string output_file)
-{
-    zs.dest = fopen(output_file.c_str(), "w");
-    zs.strm.zalloc = Z_NULL;
-    zs.strm.zfree = Z_NULL;
-    zs.strm.opaque = Z_NULL;
-    zs.ret = deflateInit(&(zs.strm), Z_DEFAULT_COMPRESSION);
-    return zs.ret;
 }
 
 /* Compress from file source to file dest until EOF on source.
@@ -173,9 +165,9 @@ int open_zlib_read_stream(string input_file)
     zs.strm.opaque = Z_NULL;
     zs.strm.avail_in = 0;
     zs.strm.next_in = Z_NULL;
-    zs.ret = inflateInit(&strm);
-    if (zs.ret != Z_OK)
-        return zs.ret;
+    zs.ret = inflateInit(&(zs.strm));
+    zs.zlib_bufsize = 0;
+    return zs.ret;
 }
 
 /* Decompress from file source to file dest until stream ends or EOF.

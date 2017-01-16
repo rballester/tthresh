@@ -29,7 +29,7 @@ void print_usage()
     cout << "Compression parameters (needed with -i):" << endl;
     cout << endl;
     cout << "\t-t <type>: input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
-    cout << "\t-s <x> <y> <z> [<t>]: the data sizes (3 or 4 integers)" << endl;
+    cout << "\t-s <x> <y> <z> [...]: the data sizes (3 or more integers)" << endl;
     cout << "\t-e | -r | -p <target>: target accuracy (relative error, RMSE or PSNR, respectively)" << endl;
     cout << endl;
     cout << "Optional compression parameters:" << endl;
@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
         }
 
         if (mode == none_mode) {
-            if (not is_number(arg) and mode == sizes_mode)
+            if (mode == sizes_mode and not is_number(arg))
                 mode = none_mode;
             if (arg[0] != '-')
                 display_error("Unrecognized flag \"" + arg + "\"");
@@ -178,12 +178,22 @@ int main(int argc, char *argv[])
             io_type = arg;
             mode = none_mode;
         } else if (mode == sizes_mode) {
-            stringstream ss(arg);
-            int next_size;
-            ss >> next_size;
-            if (next_size <= 0)
-                display_error("Size arguments must be positive integers");
-            s.push_back(next_size);
+            stringstream ss1(arg);
+            int base, exponent = 1;
+            string token;
+            int n_parts = 0; // Should be 1 (plain number) or 2 at most (base and exponent)
+            while(getline(ss1, token, '^')) {
+                n_parts++;
+                stringstream ss2(token);
+                if (n_parts == 1)
+                    ss2 >> base;
+                else if (n_parts == 2)
+                    ss2 >> exponent;
+                if (arg[arg.size()-1] == '^' or n_parts > 2 or not is_number(token) or base <= 0 or exponent <= 0)
+                    display_error("Unrecognized sizes: must be positive integers");
+            }
+            for (int dim = 0; dim < exponent; ++dim)
+                s.push_back(base);
         } else if (mode == target_mode) {
             stringstream ss(arg);
             ss >> target_value;

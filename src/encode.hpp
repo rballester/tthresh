@@ -91,35 +91,33 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector < char >&contents, vector < char >&encoding)
+void encode(vector < char >&mask, vector < char >&compressed_mask)
 {
 
     /*********************************************/
     // Perform run-length encoding into counters[]
     /*********************************************/
 
-    char last_bit = 1;
-    int counter = -1;
+    char last_bit = 0;
+    int counter = 0;
     vector < int >counters;
     std::map < int, int >frequencies;
-    for (unsigned int i = 0; i < contents.size(); ++i) {
-        char c = contents[i];
+    for (unsigned int i = 0; i < mask.size(); ++i) {
+        char c = mask[i];
         for (int j = 7; j >= 0; --j) {
             char bit = (c >> j) & 1;
             if (bit == last_bit)
                 counter++;
             else {
-                counters.push_back(counter + 1);
-                ++frequencies[counter + 1];
-                counter = 0;
+                counters.push_back(counter);
+                ++frequencies[counter];
+                counter = 1;
                 last_bit = bit;
             }
         }
     }
-    if (counter > 0) {
-        counters.push_back(counter + 1);
-        ++frequencies[counter + 1];
-    }
+    counters.push_back(counter);
+    ++frequencies[counter];
 
     /*******************************/
     // Create the Huffman dictionary
@@ -131,7 +129,7 @@ void encode(vector < char >&contents, vector < char >&encoding)
     GenerateCodes(root, HuffCode(), codes);
     delete root;
 
-    if (frequencies.size() == 1)	// Fix: if there's only one symbol, we still need one bit for it
+    if (frequencies.size() == 1) // If there's only one symbol, we still need one bit for it
         codes[frequencies.begin()->first].push_back(false);
 
     /***************************************************************************/
@@ -164,26 +162,26 @@ void encode(vector < char >&contents, vector < char >&encoding)
     /**********************************************/
 
     int dict_size = codes.size();
-    encoding = vector < char >((1 + 2 * dict_size + 1) * sizeof(int));
-    memcpy(&encoding[0], reinterpret_cast < char *>(&dict_size), sizeof(int));
-    memcpy(&encoding[0] + (1) * sizeof(int), reinterpret_cast < char *>(key_array), dict_size * sizeof(int));
-    memcpy(&encoding[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array), dict_size * sizeof(int));
-    memcpy(&encoding[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), 1 * sizeof(int));
+    compressed_mask = vector < char >((1 + 2 * dict_size + 1) * sizeof(int));
+    memcpy(&compressed_mask[0], reinterpret_cast < char *>(&dict_size), sizeof(int));
+    memcpy(&compressed_mask[0] + (1) * sizeof(int), reinterpret_cast < char *>(key_array), dict_size * sizeof(int));
+    memcpy(&compressed_mask[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array), dict_size * sizeof(int));
+    memcpy(&compressed_mask[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), 1 * sizeof(int));
 
-    char translation_wbyte = 0;
-    char translation_wbit = 7;
+    char compressed_mask_wbyte = 0;
+    char compressed_mask_wbit = 7;
     for (unsigned int i = 0; i < counters.size(); ++i) {
         for (unsigned int j = 0; j < codes[counters[i]].size(); ++j) {
-            translation_wbyte |= codes[counters[i]][j] << translation_wbit;
-            translation_wbit--;
-            if (translation_wbit < 0) {
-                encoding.push_back(translation_wbyte);
-                translation_wbit = 7;
-                translation_wbyte = 0;
+            compressed_mask_wbyte |= codes[counters[i]][j] << compressed_mask_wbit;
+            compressed_mask_wbit--;
+            if (compressed_mask_wbit < 0) {
+                compressed_mask.push_back(compressed_mask_wbyte);
+                compressed_mask_wbit = 7;
+                compressed_mask_wbyte = 0;
             }
         }
     }
-    if (translation_wbit < 7) {
-        encoding.push_back(translation_wbyte);
+    if (compressed_mask_wbit < 7) {
+        compressed_mask.push_back(compressed_mask_wbyte);
     }
 }
