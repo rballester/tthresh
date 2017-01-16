@@ -59,7 +59,7 @@ void display_error(string msg)
 bool is_number(string & s)
 {
     string::const_iterator it = s.begin();
-    while (it != s.end() and isdigit(*it))
+    while (it != s.end() and (isdigit(*it) or *it == '.'))
         ++it;
     return !s.empty() and it == s.end();
 }

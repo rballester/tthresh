@@ -30,23 +30,27 @@ void decode_factor(MatrixXd & U, int n_columns, ifstream & input_stream)
     for (int j = 0; j < n_columns; ++j) {
         for (int i = 0; i < n_columns; ++i) {
             char q = U_q[j];
-            if (q == 0)
-                U(i, j) = 0;
-            else {
+            if (q > 0) {
                 q = min(63, q + 2);
-                unsigned long int to_read = 0;
+                unsigned long int quant = 0;
                 for (int j = q; j >= 0; --j) {
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
                         input_stream.read(&matrix_rbyte, sizeof(char));
                     }
-                    to_read |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
+                    quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
                     matrix_rbit--;
                 }
-                char sign = (to_read >> q) & 1UL;
-                to_read &= ~(1UL << q);
-                U(i, j) = -(2 * sign - 1) / ((1UL << q) - double (1)) *maximum * double (to_read);
+                if (q == 63) // The matrix value is read verbatim as a double and we get 0 error
+                    U(i, j) = *reinterpret_cast<double*>(&quant);
+                else { // We dequantize this matrix value
+                    char sign = (quant >> q) & 1UL; // Read the sign bit
+                    quant &= ~(1UL << q); // Put the sign bit to zero
+                    U(i, j) = -(2 * sign - 1) / ((1UL << q) - double (1)) *maximum * double (quant);
+                }
             }
+            else
+                U(i, j) = 0;
         }
     }
 }
@@ -151,22 +155,21 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         double chunk_max = maximums[q];
 
         if (q > 0) {
-            char sign = 0;
             unsigned long int quant = 0;
-            for (long int j = q; j >= 0; --j) {
-                if (j == q and q < 63)
-                    sign = ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit) & 1UL);
-                else
-                    quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit) & 1UL) << j;
+            for (long int j = q; j >= 0; --j) { // Read q bits
+                quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit) & 1UL) << j;
                 core_quant_rbit--;
                 if (core_quant_rbit < 0) {
                     core_quant_rbyte++;
                     core_quant_rbit = 7;
                 }
             }
-            if (q == 63) {
-                c[i] = static_cast < double >(quant);
-            } else {
+            if (q == 63) { // The core value is read verbatim as a double and we get 0 error
+                c[i] = *reinterpret_cast < double* >(&quant);
+            }
+            else { // We dequantize this core value
+                char sign = (quant >> q) & 1UL; // Read the sign bit
+                quant &= ~(1UL << q); // Put the sign bit to zero
                 double dequant;
                 dequant = quant / ((1UL << q) - 1.) * (chunk_max - chunk_min) + chunk_min;
                 c[i] = -(sign * 2 - 1) * dequant;
