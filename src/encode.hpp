@@ -1,3 +1,6 @@
+#ifndef __ENCODE_HPP__
+#define __ENCODE_HPP__
+
 // Parts of this code were taken from https://rosettacode.org/wiki/Huffman_coding
 // (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
 // which is a C++ Huffman encoding implementation. Our version does a run-length encoding first
@@ -185,3 +188,5 @@ void encode(vector < char >&mask, vector < char >&compressed_mask)
         compressed_mask.push_back(compressed_mask_wbyte);
     }
 }
+
+#endif // ENCODE_HPP

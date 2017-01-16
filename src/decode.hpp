@@ -1,3 +1,6 @@
+#ifndef __DECODE_HPP__
+#define __DECODE_HPP__
+
 #include <iostream>
 #include <fstream>
 #include <queue>
@@ -76,3 +79,5 @@ void decode(ifstream & input_stream, unsigned int bytes_to_read, vector < char >
         mask.push_back(write_byte);
     delete[] buffer;
 }
+
+#endif // DECODE_HPP

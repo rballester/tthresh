@@ -1,6 +1,10 @@
+#ifndef __DECOMPRESS_HPP__
+#define __DECOMPRESS_HPP__
+
 #include "tthresh.hpp"
 #include "tucker.hpp"
 #include "zlib_io.hpp"
+#include "decode.hpp"
 #include <Eigen/Dense>
 
 using namespace std;
@@ -226,3 +230,5 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 
     delete[]r;
 }
+
+#endif // DECOMPRESS_HPP

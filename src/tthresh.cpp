@@ -5,8 +5,6 @@
 #include <iomanip>
 #include <stdlib.h>
 #include <typeinfo>
-#include "encode.hpp"
-#include "decode.hpp"
 #include "tthresh.hpp"
 #include "compress.hpp"
 #include "decompress.hpp"
@@ -206,10 +204,14 @@ int main(int argc, char *argv[])
             for (int dim = 0; dim < exponent; ++dim)
                 s.push_back(base);
         } else if (mode == target_mode) {
+            if (not is_number(arg))
+                display_error("Numeric argument expected");
             stringstream ss(arg);
             ss >> target_value;
             mode = none_mode;
         } else if (mode == skip_bytes_mode) {
+            if (not is_number(arg))
+                display_error("Numeric argument expected");
             stringstream ss(arg);
             ss >> skip_bytes;
             mode = none_mode;
@@ -239,6 +241,9 @@ int main(int argc, char *argv[])
 
     if (!input_flag and ! output_flag)
         display_error("Specify at least one of the flags -i and -o");
+
+    if (io_type != "uchar" and io_type != "ushort" and io_type != "int" and io_type != "float" and io_type != "double")
+        display_error("Unrecognized I/O type \"" + io_type + "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"");
 
     /***************************/
     // The real work starts here

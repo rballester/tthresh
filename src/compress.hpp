@@ -1,5 +1,9 @@
+#ifndef __COMPRESS_HPP__
+#define __COMPRESS_HPP__
+
 #include <fstream>
 #include <vector>
+#include "encode.hpp"
 #include "tthresh.hpp"
 #include "tucker.hpp"
 #include "zlib_io.hpp"
@@ -95,10 +99,6 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     else if (io_type == "double") {
         io_type_size = sizeof(double);
         io_type_code = 4;
-    }
-    else {
-        cout << "Unrecognized I/O type \"" << io_type << "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"" << endl;
-        exit(1);
     }
     
     /******************/
@@ -433,3 +433,5 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     bpv_stream.close();
     return data;
 }
+
+#endif // COMPRESS_HPP

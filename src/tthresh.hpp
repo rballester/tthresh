@@ -1,5 +1,5 @@
-#ifndef TTHRESH_HPP
-#define TTHRESH_HPP
+#ifndef __TTHRESH_HPP__
+#define __TTHRESH_HPP__
 
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
