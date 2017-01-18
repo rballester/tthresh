@@ -257,7 +257,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             double sse = 0;
             if (right > left + 1) {
                 if (q > 0) {
-                    for (int i = left; i < right; ++i) {	// TODO Can we approximate the error computation?
+                    for (int i = left; i < right; ++i) { // TODO: Can we approximate the error due to quantization?
                         long int quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
                         double dequant = quant * (chunk_max - chunk_min) / ((1UL << q) - 1.) + chunk_min;
                         sse += (sorting[i].first - dequant) * (sorting[i].first - dequant);
@@ -290,7 +290,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         if (q == 63)
             right = size;
 
-        int chunk_size = (right - left);
+        unsigned long int chunk_size = (right - left);
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right - 1].first;
 
@@ -334,7 +334,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             if (chunk_ids[i] == 0)
                 mask_wbit--;
             else if (chunk_ids[i] == chunk_num) {
-                mask_wbyte |= 1 << mask_wbit;
+                mask_wbyte |= (1 << mask_wbit);
                 mask_wbit--;
             }
             if (mask_wbit < 0) {
@@ -346,7 +346,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         if (mask_wbit < 7)
             mask.push_back(mask_wbyte);
         vector < char >compressed_mask;
-        encode(mask, compressed_mask); // TODO: make encode() write directly into the zlib stream
+        encode(mask, compressed_mask);
 
         chunk_info ci;
         ci.compressed_size = compressed_mask.size();
@@ -389,15 +389,14 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     if (verbose)
         cout << "Done" << endl << flush;
 
-    /********************************************/
+    /************************/
     // Save the core encoding
-    /********************************************/
+    /************************/
 
     if (verbose)
         cout << "Saving core quantization... " << flush;
     unsigned char core_quant_wbyte = 0;
     char core_quant_wbit = 7;
-//    vector<char> buf;
     for (int i = 0; i < size; ++i) {
         chunk_num = chunk_ids[i];
         char q = chunk_num - 1;
@@ -406,8 +405,6 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                 core_quant_wbyte |= ((*reinterpret_cast < unsigned long int* >(&c[i]) >> j) &1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
-//                    output_stream.write(&core_quant_wbyte, sizeof(char));
-//                    buf.push_back(core_quant_wbyte);
                     write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
                     core_quant_wbyte = 0;
                     core_quant_wbit = 7;
@@ -415,31 +412,20 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             }
         }
     }
-    if (core_quant_wbit < 7) {
-//        output_stream.write(&core_quant_wbyte, sizeof(char));
-//        buf.push_back(core_quant_wbyte);
-        int ret = write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
-        assert(ret == Z_OK);
-    }
-//    write_zlib_stream(reinterpret_cast < unsigned char *> (&buf[0]), buf.size()*sizeof(char));
+    if (core_quant_wbit < 7)
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
     if (verbose)
         cout << "Done" << endl << flush;
-    delete[]c;
-//    output_stream.close();
-    int ret = close_zlib_write_stream();
-    assert(ret == Z_OK);
+    delete[] c;
+    close_zlib_write_stream();
 
-    /***********************************************/
-    // Compute statistics of the resulting compression rate
-    /***********************************************/
-    
-    ifstream bpv_stream(compressed_file.c_str(), ios::in | ios::binary);
-    streampos beginning = bpv_stream.tellg();
-    bpv_stream.seekg(0, ios::end);
-    long int newbits = (bpv_stream.tellg() - beginning) * 8;
+    /******************************************************************/
+    // Compute and display statistics of the resulting compression rate
+    /******************************************************************/
+
+    long int newbits = zs.total_written_bytes * 8;
     cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * io_type_size * 8L / double (newbits)
          << ", bpv = " << newbits / double (size) << endl << flush;
-    bpv_stream.close();
     return data;
 }
 

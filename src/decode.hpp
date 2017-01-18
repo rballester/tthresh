@@ -4,7 +4,6 @@
 #include <iostream>
 #include <fstream>
 #include <queue>
-#include <map>
 #include <climits>
 #include <iterator>
 #include <algorithm>
@@ -12,15 +11,14 @@
 
 using namespace std;
 
-void decode(ifstream & input_stream, unsigned int bytes_to_read, vector < char >&mask)
+void decode(unsigned int bytes_to_read, vector < char >&mask)
 {
-
     /*********************************************/
     // Read dictionary, encoding size and encoding
     /*********************************************/
 
     char *buffer = new char[bytes_to_read];
-    input_stream.read(reinterpret_cast < char *>(buffer), bytes_to_read * sizeof(char));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(buffer), bytes_to_read * sizeof(char));
     unsigned int dict_size = reinterpret_cast < unsigned int *>(buffer)[0];
     unsigned int *key_array = reinterpret_cast < unsigned int *>(buffer) + 1;
     unsigned int *code_array = reinterpret_cast < unsigned int *>(buffer) + 1 + dict_size;

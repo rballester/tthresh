@@ -10,21 +10,20 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd & U, int n_columns, ifstream & input_stream)
+void decode_factor(MatrixXd & U, int n_columns)
 {
-
     U = MatrixXd(n_columns, n_columns);
 
     // First, the matrix's maximum, used for quantization
     double maximum;
-    input_stream.read(reinterpret_cast < char *>(&maximum), sizeof(double));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&maximum), sizeof(double));
 
     // Next, the q for each column
     vector < char >U_q(n_columns);
     for (int i = 0; i < n_columns; ++i)
-        input_stream.read(&U_q[i], sizeof(char));
+        read_zlib_stream(reinterpret_cast < unsigned char *>(&U_q[i]), sizeof(char));
 
-    // Finally we dequantize the matrix itself
+    // Finally we can dequantize the matrix
     char matrix_rbyte;
     char matrix_rbit = -1;
     for (int j = 0; j < n_columns; ++j) {
@@ -36,7 +35,7 @@ void decode_factor(MatrixXd & U, int n_columns, ifstream & input_stream)
                 for (int j = q; j >= 0; --j) {
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
-                        input_stream.read(&matrix_rbyte, sizeof(char));
+                        read_zlib_stream(reinterpret_cast < unsigned char *>(&matrix_rbyte), sizeof(char));
                     }
                     quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
                     matrix_rbit--;
@@ -57,26 +56,15 @@ void decode_factor(MatrixXd & U, int n_columns, ifstream & input_stream)
 
 void decompress(string compressed_file, string output_file, double *data, bool verbose, bool debug)
 {
-
     if (verbose)
         cout << endl << "/***** Decompression *****/" << endl << endl << flush;
-
-    FILE *source = fopen(compressed_file.c_str(), "r");
-    FILE *dest = fopen("tmp", "w");
-    int ret = inf(source, dest);
-    if (ret != Z_OK) {
-      cout << "Error with zlib inflation: code = " << ret << endl;
-      exit(1);
-    }
-    fclose(source);
-    fclose(dest);
     
     // Read output tensor dimensionality, sizes and type
-    ifstream input_stream("tmp", ios::in | ios::binary);
+    open_zlib_read_stream(compressed_file);
     char n;
-    input_stream.read(reinterpret_cast < char *>(&n), sizeof(char));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&n), sizeof(char));
     vector < int >s(n);
-    input_stream.read(reinterpret_cast < char *>(&s[0]), n * sizeof(int));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&s[0]), n * sizeof(int));
     long int size = 1;
     for (int i = 0; i < n; ++i)
         size *= s[i];
@@ -87,7 +75,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << "..." << endl;
     }
     char io_type_code;
-    input_stream.read(reinterpret_cast < char *>(&io_type_code), sizeof(char));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(char));
     char io_type_size;
     if (io_type_code == 0) {
         io_type_size = 1;
@@ -102,18 +90,17 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     }
     vector<double> minimums;
     vector<double> maximums;
-
     vector < int >encoding_mask(size, 0);
     int chunk_num = 1;
     unsigned long int assigned = 0;
     while(assigned < size) {
         chunk_info ci;
-        input_stream.read(reinterpret_cast < char *>(&ci), sizeof(chunk_info));
+        read_zlib_stream(reinterpret_cast < unsigned char *>(&ci), sizeof(chunk_info));
         minimums.push_back(ci.minimum);
         maximums.push_back(ci.maximum);
         vector < char >mask;
 	
-        decode(input_stream, ci.compressed_size, mask);
+        decode(ci.compressed_size, mask);
 	
         unsigned long int ind = 0;
         for (unsigned int i = 0; i < mask.size() and ind < size; ++i) {	// TODO: sum directly
@@ -137,16 +124,14 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << "Decoding factor matrices... " << flush;
     vector < MatrixXd > Us(n);
     for (int i = 0; i < n; ++i)
-        decode_factor(Us[i], s[i], input_stream);
+        decode_factor(Us[i], s[i]);
     if (verbose)
         cout << "Done" << endl << flush;
     
-    // Recover the quantized core (i.e. read all remaining data) and dequantize it
+    // Recover the quantized core and dequantize it
     double *c = new double[size];
-    std::vector < char >core_quant_buffer((istreambuf_iterator < char >(input_stream)), istreambuf_iterator < char >());
-    input_stream.close();
-    int core_quant_rbyte = 0;
-    char core_quant_rbit = 7;
+    char core_quant_rbyte = 0;
+    char core_quant_rbit = -1;
 
     for (int i = 0; i < size; ++i) {
         int chunk_num = encoding_mask[i];
@@ -157,12 +142,12 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         if (q > 0) {
             unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) { // Read q bits
-                quant |= ((core_quant_buffer[core_quant_rbyte] >> core_quant_rbit) & 1UL) << j;
-                core_quant_rbit--;
                 if (core_quant_rbit < 0) {
-                    core_quant_rbyte++;
+                    read_zlib_stream(reinterpret_cast < unsigned char *>(&core_quant_rbyte), sizeof(char));
                     core_quant_rbit = 7;
                 }
+                quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;
+                core_quant_rbit--;
             }
             if (q == 63) { // The core value is read verbatim as a double and we get 0 error
                 c[i] = *reinterpret_cast < double* >(&quant);
@@ -177,7 +162,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         } else
             c[i] = 0;
     }
-    input_stream.close();
+    close_zlib_read_stream();
 
     if (verbose)
         cout << "Reconstructing tensor... " << flush;

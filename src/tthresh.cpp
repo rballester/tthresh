@@ -11,59 +11,6 @@
 
 using namespace std;
 
-void print_usage()
-{
-    cout << endl;
-    cout << "tthresh: a multidimensional data compressor" << endl;
-    cout << "Usage: tthresh <options>" << endl;
-    cout << endl;
-
-    cout << "\t-h                    - Print this usage information and exit" << endl;
-    cout << "\t-i <input file>       - Input dataset (string). Either -i or -o (or both) must be specified" << endl;
-    cout << "\t-c <compressed file>  - Name for the compressed result (string)" << endl;
-    cout << "\t-o <output file>      - If specified, the compressed file (-c) will be decompressed to this file name (string)" << endl;
-    cout << "\t-v                    - Verbose mode; prints main algorithm steps" << endl;
-    cout << "\t-d                    - Print debug information" << endl;
-    cout << endl;
-
-    cout << "Compression parameters (needed with -i):" << endl;
-    cout << endl;
-    cout << "\t-t <type>             - Input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
-    cout << "\t-s <x> <y> <z> [...]  - Data sizes (3 or more integers)" << endl;
-    cout << "\t-e | -r | -p <target> - Target accuracy (real); relative error, RMSE or PSNR, respectively" << endl;
-    cout << endl;
-
-    cout << "Optional compression parameters:" << endl;
-    cout << endl;
-    cout << "\t-k <n>                - Skip n leading bytes, for e.g. removing a header (integer)" << endl;
-    cout << endl;
-
-    cout << "Examples:" << endl;
-    cout << endl;
-    cout << "\ttthresh -i data -t uchar -s 256^3 -p 40 -c data.compressed -o data.decompressed - Compress and decompress a volume of unsigned chars with PSNR = 40" << endl;
-    cout << "\ttthresh -i data -t float -s 128 256 64 100 -p 40 -c data.compressed             - Compress a 4D tensor (e.g. time-dependent volume)" << endl;
-    cout << "\ttthresh -i data -t double -s 2^20 -p 40 -c data.compressed                      - Compress a 1D signal with ~1M points by reshaping it into a 2^20 tensor" << endl;
-    cout << "\ttthresh -c data.compressed -d data.decompressed                                 - Decompress a dataset" << endl;
-    cout << endl;
-}
-
-void display_error(string msg)
-{
-    cout << endl;
-    cout << "Error: " << msg << endl;
-    cout << "Run \"tthresh -h\" for usage information" << endl;
-    cout << endl;
-    exit(1);
-}
-
-bool is_number(string & s)
-{
-    string::const_iterator it = s.begin();
-    while (it != s.end() and (isdigit(*it) or *it == '.'))
-        ++it;
-    return !s.empty() and it == s.end();
-}
-
 int main(int argc, char *argv[])
 {
     /************************************/
@@ -242,7 +189,7 @@ int main(int argc, char *argv[])
     if (!input_flag and ! output_flag)
         display_error("Specify at least one of the flags -i and -o");
 
-    if (io_type != "uchar" and io_type != "ushort" and io_type != "int" and io_type != "float" and io_type != "double")
+    if (input_flag and io_type != "uchar" and io_type != "ushort" and io_type != "int" and io_type != "float" and io_type != "double")
         display_error("Unrecognized I/O type \"" + io_type + "\". Supported are: \"uchar\", \"ushort\", \"int\", \"float\", \"double\"");
 
     /***************************/
