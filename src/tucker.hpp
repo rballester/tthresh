@@ -34,13 +34,9 @@ void project(MatrixXd & M, MatrixXd & U, MatrixXd & M_proj, bool compress)
 // If compress == true, then the factor matrices are output parameters
 void hosvd(double *data, vector < int >&s, vector < MatrixXd > &Us, bool compress, bool verbose)
 {
-    int n = s.size();
+    char n = s.size();
 
     if (verbose) cout << endl;
-    vector<unsigned long int> sprod(n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
-    sprod[0] = 1;
-    for (int dim = 0; dim < n; ++dim)
-        sprod[dim+1] = sprod[dim]*s[dim];
 
     // First unfolding: special case (elements are already arranged as we want)
     if (verbose) cout << "\tUnfold (1)... " << flush;

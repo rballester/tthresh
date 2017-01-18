@@ -94,8 +94,7 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector < char >&mask, vector < char >&compressed_mask)
-{
+void encode(vector < char >&mask, vector < char >&compressed_mask) {
 
     /*********************************************/
     // Perform run-length encoding into counters[]

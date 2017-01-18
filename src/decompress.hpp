@@ -10,18 +10,18 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd & U, int n_columns)
-{
+void decode_factor(MatrixXd & U, int n_columns) {
+
     U = MatrixXd(n_columns, n_columns);
 
     // First, the matrix's maximum, used for quantization
     double maximum;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&maximum), sizeof(double));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&maximum), sizeof(maximum));
 
     // Next, the q for each column
     vector < char >U_q(n_columns);
     for (int i = 0; i < n_columns; ++i)
-        read_zlib_stream(reinterpret_cast < unsigned char *>(&U_q[i]), sizeof(char));
+        read_zlib_stream(reinterpret_cast < unsigned char *>(&U_q[i]), sizeof(U_q[i]));
 
     // Finally we can dequantize the matrix
     char matrix_rbyte;
@@ -32,10 +32,10 @@ void decode_factor(MatrixXd & U, int n_columns)
             if (q > 0) {
                 q = min(63, q + 2);
                 unsigned long int quant = 0;
-                for (int j = q; j >= 0; --j) {
+                for (char j = q; j >= 0; --j) {
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
-                        read_zlib_stream(reinterpret_cast < unsigned char *>(&matrix_rbyte), sizeof(char));
+                        read_zlib_stream(reinterpret_cast < unsigned char *>(&matrix_rbyte), sizeof(matrix_rbyte));
                     }
                     quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
                     matrix_rbit--;
@@ -54,68 +54,67 @@ void decode_factor(MatrixXd & U, int n_columns)
     }
 }
 
-void decompress(string compressed_file, string output_file, double *data, bool verbose, bool debug)
-{
+void decompress(string compressed_file, string output_file, double *data, bool verbose, bool debug) {
+
     if (verbose)
         cout << endl << "/***** Decompression *****/" << endl << endl << flush;
     
     // Read output tensor dimensionality, sizes and type
     open_zlib_read_stream(compressed_file);
     char n;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&n), sizeof(char));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&n), sizeof(n));
     vector < int >s(n);
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&s[0]), n * sizeof(int));
-    long int size = 1;
-    for (int i = 0; i < n; ++i)
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&s[0]), n * sizeof(s[0]));
+    ind_t size = 1;
+    for (char i = 0; i < n; ++i)
         size *= s[i];
     if (debug) {
         cout << "Decompressing a tensor of size " << s[0];
-        for (int i = 1; i < n; ++i)
+        for (char i = 1; i < n; ++i)
             cout << " x " << s[i];
         cout << "..." << endl;
     }
     char io_type_code;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(char));
+    read_zlib_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(io_type_code));
     char io_type_size;
-    if (io_type_code == 0) {
-        io_type_size = 1;
-    } else if (io_type_code == 1) {
-        io_type_size = 2;
-    } else if (io_type_code == 2) {
-        io_type_size = 4;
-    } else if (io_type_code == 3) {
-        io_type_size = 4;
-    } else {
-        io_type_size = 8;
-    }
+    if (io_type_code == 0)
+        io_type_size = sizeof(unsigned char);
+    else if (io_type_code == 1)
+        io_type_size = sizeof(unsigned short);
+    else if (io_type_code == 2)
+        io_type_size = sizeof(int);
+    else if (io_type_code == 3)
+        io_type_size = sizeof(float);
+    else
+        io_type_size = sizeof(double);
     vector<double> minimums;
     vector<double> maximums;
-    vector < int >encoding_mask(size, 0);
-    int chunk_num = 1;
-    unsigned long int assigned = 0;
+    vector<char>chunk_ids(size, 0);
+    char chunk_num = 1;
+    ind_t assigned = 0;
     while(assigned < size) {
         chunk_info ci;
         read_zlib_stream(reinterpret_cast < unsigned char *>(&ci), sizeof(chunk_info));
         minimums.push_back(ci.minimum);
         maximums.push_back(ci.maximum);
         vector < char >mask;
-	
+
         decode(ci.compressed_size, mask);
-	
+
         unsigned long int ind = 0;
         for (unsigned int i = 0; i < mask.size() and ind < size; ++i) {	// TODO: sum directly
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
-                while (ind < size and encoding_mask[ind] > 0) // Skip core elements already assigned to a previous chunk
+                while (ind < size and chunk_ids[ind] > 0) // Skip core elements already assigned to a previous chunk
                     ind++;
                 if ((mask[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
-                    encoding_mask[ind] = chunk_num;
+                    chunk_ids[ind] = chunk_num;
                     ++assigned;
                 }
                 ind++;
             }
         }
         if (verbose)
-            cout << "Decoded chunk " << chunk_num << ", compressed_size is " << ci.compressed_size << ", mask has " << mask.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
+            cout << "Decoded chunk " << int(chunk_num) << ", compressed_size is " << ci.compressed_size << ", mask has " << mask.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
         ++chunk_num;
     }
     
@@ -123,7 +122,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (verbose)
         cout << "Decoding factor matrices... " << flush;
     vector < MatrixXd > Us(n);
-    for (int i = 0; i < n; ++i)
+    for (char i = 0; i < n; ++i)
         decode_factor(Us[i], s[i]);
     if (verbose)
         cout << "Done" << endl << flush;
@@ -134,7 +133,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     char core_quant_rbit = -1;
 
     for (int i = 0; i < size; ++i) {
-        int chunk_num = encoding_mask[i];
+        int chunk_num = chunk_ids[i];
         char q = chunk_num - 1;
         double chunk_min = minimums[q];
         double chunk_max = maximums[q];
@@ -143,7 +142,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) { // Read q bits
                 if (core_quant_rbit < 0) {
-                    read_zlib_stream(reinterpret_cast < unsigned char *>(&core_quant_rbyte), sizeof(char));
+                    read_zlib_stream(reinterpret_cast < unsigned char *>(&core_quant_rbyte), sizeof(core_quant_rbyte));
                     core_quant_rbit = 7;
                 }
                 quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;
@@ -166,30 +165,29 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 
     if (verbose)
         cout << "Reconstructing tensor... " << flush;
-    double *r = c;
-    hosvd(r, s, Us, false, verbose);
+    hosvd(c, s, Us, false, verbose);
     if (verbose)
         cout << "Done" << endl << flush;
 
     ofstream output_stream(output_file.c_str(), ios::out | ios::binary);
-    unsigned long int buf_elems = 1 << 20;
+    unsigned long int buf_elems = CHUNK;
     char *buffer = new char[io_type_size * buf_elems];
     unsigned long int buffer_wpos = 0;
     double sse = 0;
-    double input_norm = 0;
-    double input_min = std::numeric_limits < double >::max();
-    double input_max = std::numeric_limits < double >::min();
+    double datanorm = 0;
+    double datamin = std::numeric_limits < double >::max();
+    double datamax = std::numeric_limits < double >::min();
     for (long int i = 0; i < size; ++i) {
         if (io_type_code == 0) {
-            reinterpret_cast < unsigned char *>(buffer)[buffer_wpos] = abs(r[i]);
+            reinterpret_cast < unsigned char *>(buffer)[buffer_wpos] = abs(c[i]);
         } else if (io_type_code == 1) {
-            reinterpret_cast < unsigned short *>(buffer)[buffer_wpos] = r[i];
+            reinterpret_cast < unsigned short *>(buffer)[buffer_wpos] = abs(c[i]);
         } else if (io_type_code == 2) {
-            reinterpret_cast < int *>(buffer)[buffer_wpos] = r[i];
+            reinterpret_cast < int *>(buffer)[buffer_wpos] = c[i];
         } else if (io_type_code == 3) {
-            reinterpret_cast < float *>(buffer)[buffer_wpos] = r[i];
+            reinterpret_cast < float *>(buffer)[buffer_wpos] = c[i];
         } else {
-            reinterpret_cast < double *>(buffer)[buffer_wpos] = r[i];
+            reinterpret_cast < double *>(buffer)[buffer_wpos] = c[i];
         }
         buffer_wpos++;
         if (buffer_wpos == buf_elems) {
@@ -197,26 +195,26 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             output_stream.write(buffer, io_type_size * buf_elems);
         }
         if (data != NULL) {
-            input_norm += data[i] * data[i];
-            sse += (data[i] - r[i]) * (data[i] - r[i]);
-            input_min = min(input_min, data[i]);
-            input_max = max(input_max, data[i]);
+            datanorm += data[i] * data[i];
+            sse += (data[i] - c[i]) * (data[i] - c[i]);
+            datamin = min(datamin, data[i]);
+            datamax = max(datamax, data[i]);
         }
     }
     if (buffer_wpos > 0)
         output_stream.write(buffer, io_type_size * buffer_wpos);
-    delete[]buffer;
+    delete[] buffer;
     output_stream.close();
 
-    if (data != NULL) {		// If the uncompressed input is available, we compute the error statistics
-        input_norm = sqrt(input_norm);
-        double eps = sqrt(sse) / input_norm;
+    if (data != NULL) {	// If the uncompressed input is available, we compute the error statistics
+        datanorm = sqrt(datanorm);
+        double eps = sqrt(sse) / datanorm;
         double rmse = sqrt(sse / size);
-        double psnr = 20 * log10((input_max - input_min) / (2 * rmse));
+        double psnr = 20 * log10((datamax - datamin) / (2 * rmse));
         cout << "eps = " << eps << ", rmse = " << rmse << ", psnr = " << psnr << endl;
     }
 
-    delete[]r;
+    delete[] c;
 }
 
 #endif // DECOMPRESS_HPP

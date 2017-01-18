@@ -20,21 +20,21 @@
 
 #define CHUNK (1<<18)
 
-int min(int a, int b) {
+ind_t min(ind_t a, ind_t b) {
     return (a < b) ? a : b;
 }
 
 struct {
-    FILE *file; // File handle to write/read to/from
-    unsigned char inout[CHUNK];
-    unsigned char buf[CHUNK];
+    FILE *file; // File handle to read/write from/to
+    unsigned char inout[CHUNK]; // Buffer to write the results of inflation/deflation
+    unsigned char buf[CHUNK]; // Buffer used for the read/write operations
     int bufstart = 0;
-    int bufend = 0; // Where to start in the buffer
-    unsigned long int total_written_bytes; // Used to compute the final file size
+    int bufend = 0;
+    ind_t total_written_bytes = 0; // Used to compute the final file size
     z_stream strm;
-} zs; // Write/read state for zlib interfacing
+} zs; // Read/write state for zlib interfacing
 
-int deflate_chunk(unsigned long int bytes_to_write, int flush)
+int deflate_chunk(ind_t bytes_to_write, int flush)
 {
     zs.strm.avail_in = bytes_to_write;
     zs.strm.next_in = zs.buf;
@@ -67,7 +67,7 @@ void open_zlib_write_stream(string output_file)
         throw ret;
 }
 
-void write_zlib_stream(unsigned char *buf, unsigned long int bytes_to_write)
+void write_zlib_stream(unsigned char *buf, ind_t bytes_to_write)
 {
     while (bytes_to_write > 0) {
         unsigned long int to_copy = min(bytes_to_write, CHUNK-zs.bufend);
@@ -96,14 +96,16 @@ void close_zlib_write_stream() {
 // It sets zs.bufstart to 0 and zs.bufend to the number of inflated bytes
 void inflate_chunk()
 {
-        if (zs.strm.avail_out > 0) { // If last time we inflated, the input buffer ran out
+        if (zs.strm.avail_out > 0) { // If last time we inflated the input buffer ran out, it's time to refill it
             zs.strm.avail_in = fread(zs.inout, 1, CHUNK, zs.file);
             if (ferror(zs.file)) {
                 (void)inflateEnd(&zs.strm);
                 throw Z_ERRNO;
             }
-            if (zs.strm.avail_in == 0)
-                display_error("zlib input file stream finished while trying to read");
+            if (zs.strm.avail_in == 0) {
+                cout << "zlib input file stream finished unexpectedly soon" << endl;
+                exit(1);
+            }
             zs.strm.next_in = zs.inout;
         }
 

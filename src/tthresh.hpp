@@ -1,10 +1,15 @@
 #ifndef __TTHRESH_HPP__
 #define __TTHRESH_HPP__
 
+#include <vector>
 using namespace std;
 
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
+
+typedef size_t ind_t; // Used to index bytes and bits
+
+vector<ind_t> sprod;
 
 struct chunk_info {
     unsigned int compressed_size;
@@ -12,15 +17,14 @@ struct chunk_info {
     double maximum;
 };
 
-void print_usage()
-{
+void print_usage() {
     cout << endl;
     cout << "tthresh: a multidimensional data compressor" << endl;
     cout << "Usage: tthresh <options>" << endl;
     cout << endl;
 
     cout << "\t-h                    - Print this usage information and exit" << endl;
-    cout << "\t-i <input file>       - Input dataset (string). Either -i or -o (or both) must be specified" << endl;
+    cout << "\t-i <input file>       - Input dataset in raw format (string). Either -i or -o (or both) must be specified" << endl;
     cout << "\t-c <compressed file>  - Name for the compressed result (string)" << endl;
     cout << "\t-o <output file>      - If specified, the compressed file (-c) will be decompressed to this file name (string)" << endl;
     cout << "\t-v                    - Verbose mode; prints main algorithm steps" << endl;
@@ -42,14 +46,13 @@ void print_usage()
     cout << "Examples:" << endl;
     cout << endl;
     cout << "\ttthresh -i data -t uchar -s 256^3 -p 40 -c data.compressed -o data.decompressed - Compress and decompress a volume of unsigned chars with PSNR = 40" << endl;
-    cout << "\ttthresh -i data -t float -s 128 256 64 100 -p 40 -c data.compressed             - Compress a 4D tensor (e.g. time-dependent volume)" << endl;
+    cout << "\ttthresh -i data -k 16 -t float -s 128 256 64 100 -p 40 -c data.compressed       - Compress a 4D tensor (e.g. time-dependent volume), skipping the first 16 bytes (header)" << endl;
     cout << "\ttthresh -i data -t double -s 2^20 -p 40 -c data.compressed                      - Compress a 1D signal with ~1M points by reshaping it into a 2^20 tensor" << endl;
     cout << "\ttthresh -c data.compressed -d data.decompressed                                 - Decompress a dataset" << endl;
     cout << endl;
 }
 
-void display_error(string msg)
-{
+void display_error(string msg) {
     cout << endl;
     cout << "Error: " << msg << endl;
     cout << "Run \"tthresh -h\" for usage information" << endl;
@@ -57,8 +60,7 @@ void display_error(string msg)
     exit(1);
 }
 
-bool is_number(string & s)
-{
+bool is_number(string & s) {
     string::const_iterator it = s.begin();
     while (it != s.end() and (isdigit(*it) or *it == '.'))
         ++it;
