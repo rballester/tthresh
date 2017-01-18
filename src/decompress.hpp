@@ -178,17 +178,16 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     double datamin = std::numeric_limits < double >::max();
     double datamax = std::numeric_limits < double >::min();
     for (long int i = 0; i < size; ++i) {
-        if (io_type_code == 0) {
-            reinterpret_cast < unsigned char *>(buffer)[buffer_wpos] = abs(c[i]);
-        } else if (io_type_code == 1) {
-            reinterpret_cast < unsigned short *>(buffer)[buffer_wpos] = abs(c[i]);
-        } else if (io_type_code == 2) {
+        if (io_type_code == 0)
+            reinterpret_cast < unsigned char *>(buffer)[buffer_wpos] = max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]));
+        else if (io_type_code == 1)
+            reinterpret_cast < unsigned short *>(buffer)[buffer_wpos] = max(0.0, min(double(std::numeric_limits<unsigned short>::max()), c[i]));
+        else if (io_type_code == 2)
             reinterpret_cast < int *>(buffer)[buffer_wpos] = c[i];
-        } else if (io_type_code == 3) {
+        else if (io_type_code == 3)
             reinterpret_cast < float *>(buffer)[buffer_wpos] = c[i];
-        } else {
-            reinterpret_cast < double *>(buffer)[buffer_wpos] = c[i];
-        }
+        else
+           reinterpret_cast < double *>(buffer)[buffer_wpos] = c[i];
         buffer_wpos++;
         if (buffer_wpos == buf_elems) {
             buffer_wpos = 0;
