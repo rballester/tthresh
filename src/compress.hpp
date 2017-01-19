@@ -16,7 +16,7 @@ using namespace Eigen;
 // *** Variable types ***
 // Number of dimensions: char
 // Chunk counting: char
-// Size of each dimension: int
+// Size of each dimension: unsigned int
 // Total size: size_t
 
 // *** Structure of the compressed file ***
@@ -28,21 +28,21 @@ using namespace Eigen;
 // (6) Factor matrices
 // (7) The quantized core
 
-void encode_factor(MatrixXd & U, int n_columns, vector < char >&columns_q) {
+void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns_q) {
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
     write_zlib_stream(reinterpret_cast< unsigned char *> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
-    for (int i = 0; i < n_columns; ++i)
+    for (unsigned int i = 0; i < n_columns; ++i)
         write_zlib_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(columns_q[i]));
 
     // Finally the matrix itself, quantized
     char matrix_wbyte = 0;
     char matrix_wbit = 7;
-    for (int j = 0; j < n_columns; ++j) {
-        for (int i = 0; i < n_columns; ++i) {
+    for (unsigned int j = 0; j < n_columns; ++j) {
+        for (unsigned int i = 0; i < n_columns; ++i) {
             char q = columns_q[j];
             if (q > 0) {
                 q = min(63, q + 2);	// Seems a good compromise
@@ -101,7 +101,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         io_type_size = sizeof(float);
         io_type_code = 3;
     }
-    else if (io_type == "double") {
+    else {
         io_type_size = sizeof(double);
         io_type_code = 4;
     }
@@ -223,7 +223,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << "Decomposing the " << int(n) << "D tensor... " << flush;
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
-    vector < MatrixXd > Us(n);	// Tucker factor matrices
+    vector<MatrixXd> Us(n);	// Tucker factor matrices
     hosvd(c, s, Us, true, verbose);
     if (verbose)
         cout << "Done" << endl << flush;
@@ -315,7 +315,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                     to_write = min(((1UL << q) - 1), (unsigned long int)
                                    roundl((sorting[i].first - chunk_min) / (chunk_max - chunk_min) * ((1UL << q) - 1)));
                 to_write |= (c[sorting[i].second] < 0) * (1UL << q);
-                c[sorting[i].second] = *reinterpret_cast < double *>(&to_write);
+                memcpy(&c[sorting[i].second], (void*)&to_write, sizeof(to_write));
             }
         }
 

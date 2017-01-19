@@ -10,7 +10,7 @@ using namespace Eigen;
 // If compress == true, U is an output parameter, computed as the HOSVD of
 // the tensor (left singular vectors of M) and M is compressed using U.transpose().
 // If compress == false, U is an input parameter and M is decompressed using U.
-void project(MatrixXd & M, MatrixXd & U, MatrixXd & M_proj, bool compress)
+void project(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, bool compress)
 {
     if (compress) {
         SelfAdjointEigenSolver < MatrixXd > es(M * M.transpose()); // M*M^T is symmetric -> faster eigenvalue computation
@@ -32,7 +32,7 @@ void project(MatrixXd & M, MatrixXd & U, MatrixXd & M_proj, bool compress)
 
 // Reads a tensor in the buffer data of size s, and compresses or decompresses it in-place.
 // If compress == true, then the factor matrices are output parameters
-void hosvd(double *data, vector < int >&s, vector < MatrixXd > &Us, bool compress, bool verbose)
+void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bool verbose)
 {
     char n = s.size();
 
@@ -54,7 +54,7 @@ void hosvd(double *data, vector < int >&s, vector < MatrixXd > &Us, bool compres
         M = MatrixXd(s[dim], sprod[n]/s[dim]); // dim-th factor matrix
         for (int j = 0; j < sprod[n]/s[dim-1]; ++j) {
             int write_i = (j/sprod[dim-1]) % s[dim];
-            unsigned long int base_write_j = j % sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
+            ind_t base_write_j = j % sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
             for (int i = 0; i < s[dim-1]; ++i)
                 M(write_i, base_write_j + i*sprod[dim-1]) = M_proj(i, j);
         }

@@ -7,7 +7,7 @@ using namespace std;
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
 
-typedef size_t ind_t; // Used to index bytes and bits
+typedef long int ind_t; // Used to index bytes and bits
 
 vector<ind_t> sprod;
 

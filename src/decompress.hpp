@@ -16,12 +16,12 @@ void decode_factor(MatrixXd & U, int n_columns) {
 
     // First, the matrix's maximum, used for quantization
     double maximum;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&maximum), sizeof(maximum));
+    read_zlib_stream(reinterpret_cast<unsigned char*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
     vector < char >U_q(n_columns);
     for (int i = 0; i < n_columns; ++i)
-        read_zlib_stream(reinterpret_cast < unsigned char *>(&U_q[i]), sizeof(U_q[i]));
+        read_zlib_stream(reinterpret_cast<unsigned char*> (&U_q[i]), sizeof(U_q[i]));
 
     // Finally we can dequantize the matrix
     char matrix_rbyte;
@@ -35,13 +35,13 @@ void decode_factor(MatrixXd & U, int n_columns) {
                 for (char j = q; j >= 0; --j) {
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
-                        read_zlib_stream(reinterpret_cast < unsigned char *>(&matrix_rbyte), sizeof(matrix_rbyte));
+                        read_zlib_stream(reinterpret_cast<unsigned char*> (&matrix_rbyte), sizeof(matrix_rbyte));
                     }
                     quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
                     matrix_rbit--;
                 }
                 if (q == 63) // The matrix value is read verbatim as a double and we get 0 error
-                    U(i, j) = *reinterpret_cast<double*>(&quant);
+                    memcpy(&U(i, j), (void*)&quant, sizeof(quant));
                 else { // We dequantize this matrix value
                     char sign = (quant >> q) & 1UL; // Read the sign bit
                     quant &= ~(1UL << q); // Put the sign bit to zero
@@ -101,7 +101,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 
         decode(ci.compressed_size, mask);
 
-        unsigned long int ind = 0;
+        ind_t ind = 0;
         for (unsigned int i = 0; i < mask.size() and ind < size; ++i) {	// TODO: sum directly
             for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
                 while (ind < size and chunk_ids[ind] > 0) // Skip core elements already assigned to a previous chunk
@@ -142,15 +142,14 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) { // Read q bits
                 if (core_quant_rbit < 0) {
-                    read_zlib_stream(reinterpret_cast < unsigned char *>(&core_quant_rbyte), sizeof(core_quant_rbyte));
+                    read_zlib_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte));
                     core_quant_rbit = 7;
                 }
                 quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;
                 core_quant_rbit--;
             }
-            if (q == 63) { // The core value is read verbatim as a double and we get 0 error
-                c[i] = *reinterpret_cast < double* >(&quant);
-            }
+            if (q == 63) // The core value is read verbatim as a double and we get 0 error
+                memcpy(&c[i], (void*)&quant, sizeof(quant));
             else { // We dequantize this core value
                 char sign = (quant >> q) & 1UL; // Read the sign bit
                 quant &= ~(1UL << q); // Put the sign bit to zero

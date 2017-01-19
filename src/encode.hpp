@@ -138,7 +138,7 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
     // Translate each symbol. Save the code using 27 bits and its length using 5
     /***************************************************************************/
 
-    int n_bits = 0;
+    ind_t n_bits = 0;
     unsigned int key_array[codes.size()];
     unsigned int code_array[codes.size()];
     counter = 0;
@@ -164,11 +164,11 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
     /**********************************************/
 
     int dict_size = codes.size();
-    compressed_mask = vector < char >((1 + 2 * dict_size + 1) * sizeof(int));
+    compressed_mask = vector < char >((1 + 2 * dict_size) * sizeof(int) + sizeof(n_bits));
     memcpy(&compressed_mask[0], reinterpret_cast < char *>(&dict_size), sizeof(int));
     memcpy(&compressed_mask[0] + (1) * sizeof(int), reinterpret_cast < char *>(key_array), dict_size * sizeof(int));
     memcpy(&compressed_mask[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array), dict_size * sizeof(int));
-    memcpy(&compressed_mask[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), 1 * sizeof(int));
+    memcpy(&compressed_mask[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), sizeof(n_bits));
 
     char compressed_mask_wbyte = 0;
     char compressed_mask_wbit = 7;
@@ -183,9 +183,8 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
             }
         }
     }
-    if (compressed_mask_wbit < 7) {
+    if (compressed_mask_wbit < 7)
         compressed_mask.push_back(compressed_mask_wbyte);
-    }
 }
 
 #endif // ENCODE_HPP

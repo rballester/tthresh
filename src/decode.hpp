@@ -17,10 +17,10 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
     unsigned int dict_size = reinterpret_cast < unsigned int *>(buffer)[0];
     unsigned int *key_array = reinterpret_cast < unsigned int *>(buffer) + 1;
     unsigned int *code_array = reinterpret_cast < unsigned int *>(buffer) + 1 + dict_size;
-    unsigned int n_bits = reinterpret_cast < unsigned int *>(buffer)[1 + 2 * dict_size];
+    ind_t n_bits = reinterpret_cast < unsigned int *>(buffer)[1 + 2 * dict_size];
 
     unordered_map< unsigned int, unsigned int> tm[28];
-    for (int i = 0; i < dict_size; ++i) {
+    for (unsigned int i = 0; i < dict_size; ++i) {
         unsigned int code_len = code_array[i] >> 27;
         unsigned int encoding = code_array[i] & 0x03ffffff;
         tm[code_len][encoding] = key_array[i];
@@ -38,7 +38,7 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
     int write_bit = 7;
     int this_code_len = 0;
     unordered_map< unsigned int, unsigned int>::iterator it;
-    for (int i = (1+2*dict_size+1)*sizeof(int); i < bytes_to_read; ++i) {
+    for (int i = (1+2*dict_size)*sizeof(int) + sizeof(ind_t); i < bytes_to_read; ++i) {
         char c = buffer[i];
         for (int j = 0; j < 8; ++j) {
             if (read_bits == n_bits)
@@ -52,7 +52,7 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
             it = tm[this_code_len].find(this_code); // See if this corresponds to a symbol
             if (it != tm[this_code_len].end()) {
                 // RLE decoding: put as many bits as the decoded integer indicates
-                for (int k = 0; k < it->second; ++k) {
+                for (unsigned int k = 0; k < it->second; ++k) {
                     write_byte |= current_bit << write_bit;
                     write_bit--;
                     if (write_bit < 0) {
