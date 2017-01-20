@@ -45,13 +45,23 @@ tthresh -i dataset <options> -c <compressed dataset> -o <decompressed dataset>
 
 The target accuracy can be specified either as **relative error**, **RMSE** or **PSNR**. To get more info on the available options, run ```tthresh -h```.
 
-For example, ```tthresh -i bonsai.raw -t uchar -s 256 256 256 -r 2 -c bonsai.tthresh -o bonsai.decompressed``` yields 1.9988 RMSE and 1:26 compression rate on the [bonsai data set](http://www.tc18.org/code_data_set/3D_greyscale/bonsai.raw.gz). Left image is a slice from the original, right one from the reconstructed: 
-
-<img src="https://github.com/rballester/tthresh/tree/master/images/original_vs_reconstructed.png" width="512">
-
 You are free to **use and modify** the code as long as you mention the origin. If you use it for research purposes, **please cite the paper**:
 
 ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
+
+### Visual Results
+
+3D turbulence from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
+
+<img src="https://github.com/rballester/tthresh/tree/master/images/isotropic_coarse.png" width="512">
+
+"Foot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
+
+<img src="https://github.com/rballester/tthresh/tree/master/images/foot.png" width="512">
+
+"Boston teapot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
+
+<img src="https://github.com/rballester/tthresh/tree/master/images/boston_teapot.png" width="512">
 
 ### Acknowledgment
 
