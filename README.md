@@ -53,15 +53,15 @@ You are free to **use and modify** the code as long as you mention the origin. I
 
 3D turbulence from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
 
-<img src="https://github.com/rballester/tthresh/tree/master/images/isotropic_coarse.png" width="512">
+[<img src="https://github.com/rballester/tthresh/blob/master/images/isotropic_coarse.png" width="1200">](https://raw.githubusercontent.com/rballester/tthresh/master/images/isotropic_coarse.png?token=AB6uqZlifcbJR2J7cQikLyVwdXVHaWoFks5Yi1FDwA%3D%3D)
 
 "Foot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
 
-<img src="https://github.com/rballester/tthresh/tree/master/images/foot.png" width="512">
+[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1200">](https://raw.githubusercontent.com/rballester/tthresh/master/images/foot.png?token=AB6uqQEiEwrYO9kAzUUJJ1VPXm8StfqMks5Yi1HpwA%3D%3D)
 
 "Boston teapot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
 
-<img src="https://github.com/rballester/tthresh/tree/master/images/boston_teapot.png" width="512">
+[<img src="https://github.com/rballester/tthresh/blob/master/images/boston_teapot.png" width="1200">](https://raw.githubusercontent.com/rballester/tthresh/master/images/boston_teapot.png?token=AB6uqVD8-REH39F_alYcSuGNUbvA_qrwks5Yi1HuwA%3D%3D)
 
 ### Acknowledgment
 
