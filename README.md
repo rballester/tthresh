@@ -69,4 +69,8 @@ Special thanks to [Peter G. Lindstrom](http://people.llnl.gov/pl), author of the
 
 ### Why Tucker?
 
-Tensor-based compression is **non-local**, in the sense that all compressed coefficients contribute to the transformation of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data at all spatial scales, thus achieving **very competitive compression rates**.
+Tensor-based compression is **non-local**, in the sense that all compressed coefficients contribute to the transformation of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data **at all spatial scales**, which **has several advantages**:
+
+- Very competitive compression rates
+- Smooth degradation at high compression (in particular, no blocking artifacts)
+- Ability to downsample and subsample in the compressed domain
