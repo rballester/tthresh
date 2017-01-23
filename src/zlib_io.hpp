@@ -114,10 +114,10 @@ void inflate_chunk()
         int ret = inflate(&zs.strm, Z_NO_FLUSH);
         if (ret == Z_NEED_DICT)
             ret = Z_DATA_ERROR;
-        if (ret == Z_MEM_ERROR)
+        if (ret == Z_MEM_ERROR) {
             (void)inflateEnd(&zs.strm);
-        if (ret != Z_OK and ret != Z_STREAM_END)
-            throw ret;
+	    throw ret;
+	}
         zs.bufstart = 0;
         zs.bufend = CHUNK - zs.strm.avail_out;
 }
@@ -140,7 +140,7 @@ void open_zlib_read_stream(string input_file)
         throw ret;
 }
 
-void read_zlib_stream(unsigned char *buf, unsigned long int bytes_to_read)
+void read_zlib_stream(unsigned char *buf, unsigned long int bytes_to_read, bool flag=false)
 {
     while (bytes_to_read > 0) {
         if (zs.bufstart == zs.bufend) // The buffer is empty

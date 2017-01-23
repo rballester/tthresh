@@ -93,13 +93,16 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     char chunk_num = 1;
     ind_t assigned = 0;
     while(assigned < size) {
-        chunk_info ci;
-        read_zlib_stream(reinterpret_cast < unsigned char *>(&ci), sizeof(chunk_info));
-        minimums.push_back(ci.minimum);
-        maximums.push_back(ci.maximum);
+
+        double chunk_min;
+        read_zlib_stream(reinterpret_cast < unsigned char *>(&chunk_min), sizeof(chunk_min));
+        minimums.push_back(chunk_min);
+        double chunk_max;
+        read_zlib_stream(reinterpret_cast < unsigned char *>(&chunk_max), sizeof(chunk_max));
+        maximums.push_back(chunk_max);
 
         vector<ind_t> counters;
-        decode(ci.compressed_size, counters);
+        decode(counters);
 
         ind_t ind = 0;
         bool current_bit = false;
@@ -117,7 +120,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             current_bit = !current_bit;
         }
         if (verbose)
-            cout << "Decoded chunk " << int(chunk_num) << ", compressed_size is " << ci.compressed_size << ", q=" << int (chunk_num - 1) << endl << flush;
+            cout << "Decoded chunk " << int(chunk_num) << " (q=" << int (chunk_num - 1) << "), minimum=" << minimums[minimums.size()-1] << ", maximum=" << maximums[maximums.size()-1] << endl << flush;
         ++chunk_num;
     }
     
@@ -134,7 +137,6 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     double *c = new double[size];
     char core_quant_rbyte = 0;
     char core_quant_rbit = -1;
-
     for (int i = 0; i < size; ++i) {
         int chunk_num = chunk_ids[i];
         char q = chunk_num - 1;
@@ -145,7 +147,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) { // Read q bits
                 if (core_quant_rbit < 0) {
-                    read_zlib_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte));
+                    read_zlib_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte), chunk_num==64);
                     core_quant_rbit = 7;
                 }
                 quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;

@@ -159,9 +159,9 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     // Cast the tensor to doubles
     double *data;
-    double datamin = numeric_limits < double >::max();
+    double datamin = numeric_limits < double >::max(); // Tensor statistics
     double datamax = numeric_limits < double >::min();
-    double datanorm = 0;	// Tensor statistics
+    double datanorm = 0;
     if (io_type == "double")
         data = (double *) in + skip_bytes;
     else
@@ -188,7 +188,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     datanorm = sqrt(datanorm);
     if (io_type_code != 4)
         delete[]in;
-    if (debug) cout << "Tensor statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
+    if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
 
     // Compute the cumulative products (useful later on for index computations)
     sprod = vector<ind_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
@@ -334,39 +334,38 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             }
         }
 
-        vector < char >mask;
-        char mask_wbyte = 0;
-        char mask_wbit = 7;
+        vector<unsigned long int> counters;
+
+        // RLE
+        bool current_bit = false;
+        bool last_bit = false;
+        unsigned long int counter = 0;
         for (int i = 0; i < size; ++i) {
             if (chunk_ids[i] == 0)
-                mask_wbit--;
-            else if (chunk_ids[i] == chunk_num) {
-                mask_wbyte |= (1 << mask_wbit);
-                mask_wbit--;
-            }
-            if (mask_wbit < 0) {
-                mask.push_back(mask_wbyte);
-                mask_wbyte = 0;
-                mask_wbit = 7;
+                current_bit = false;
+            else if (chunk_ids[i] == chunk_num)
+                current_bit = true;
+            else
+                continue;
+            if (current_bit == last_bit)
+                counter++;
+            else {
+                counters.push_back(counter);
+                counter = 1;
+                last_bit = current_bit;
             }
         }
-        if (mask_wbit < 7)
-            mask.push_back(mask_wbyte);
-        vector < char >compressed_mask;
-        encode(mask, compressed_mask); // TODO: predict compressed size and write directly into the zlib stream
+        counters.push_back(counter);
 
-        chunk_info ci;
-        ci.compressed_size = compressed_mask.size();
-        ci.minimum = chunk_min;
-        ci.maximum = chunk_max;
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&ci), sizeof(chunk_info));
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&compressed_mask[0]), compressed_mask.size()*sizeof(char));
+        write_zlib_stream(reinterpret_cast<unsigned char*> (&chunk_min), sizeof(chunk_min));
+        write_zlib_stream(reinterpret_cast<unsigned char*> (&chunk_max), sizeof(chunk_max));
+        encode(counters);
 
         if (verbose) {
             ind_t quant_bits = 0;
             if (q > 0)
                 quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-            cout << "Encoded chunk " << int(chunk_num) << ", compressed_size=" << ci.compressed_size << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+            cout << "Encoded chunk " << int(chunk_num) << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
 
         // Update control variables

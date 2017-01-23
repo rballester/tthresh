@@ -11,12 +11,6 @@ typedef long int ind_t; // Used to index bytes and bits
 
 vector<ind_t> sprod;
 
-struct chunk_info {
-    unsigned int compressed_size;
-    double minimum;
-    double maximum;
-};
-
 void print_usage() {
     cout << endl;
     cout << "tthresh: a multidimensional data compressor" << endl;

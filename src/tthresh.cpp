@@ -1,6 +1,4 @@
 #include <iostream>
-#include <sstream>
-#include <fstream>
 #include <string>
 #include <iomanip>
 #include <stdlib.h>
@@ -20,8 +18,8 @@ int main(int argc, char *argv[])
     Mode mode = none_mode;
     Target target = eps;
     double target_value = -1;
-    unsigned long int skip_bytes = 0;
-    vector < int >s;
+    unsigned long int skip_bytes = 0; // Used to skip headers of a specified size
+    vector<int> s; // Tensor sizes
     bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;

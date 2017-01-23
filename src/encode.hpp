@@ -3,8 +3,7 @@
 
 // Parts of this code were taken from https://rosettacode.org/wiki/Huffman_coding
 // (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
-// which is a C++ Huffman encoding implementation. Our version does a run-length encoding first
-// in order to compress a sequence of presence bits in the Tucker core.
+// which is a C++ Huffman encoding implementation.
 
 #include <iostream>
 #include <fstream>
@@ -13,22 +12,23 @@
 #include <iterator>
 #include <algorithm>
 #include <cstring>
+#include "zlib_io.hpp"
 
 using namespace std;
 
 typedef
 std::vector < bool > HuffCode;
 typedef
-std::map < int, HuffCode > HuffCodeMap;
+std::map < unsigned long int, HuffCode > HuffCodeMap;
 
 class INode {
 public:
-    const int
+    const unsigned long int
     f;
 
     virtual ~ INode() {
     } protected:
-    INode(int f):f(f) {
+    INode(unsigned long int f):f(f) {
     }
 };
 
@@ -48,10 +48,10 @@ public:
 
 class LeafNode:public INode {
 public:
-    const int
+    const unsigned long int
     c;
 
-    LeafNode(int f, int c):INode(f), c(c) {
+    LeafNode(unsigned long int f, unsigned long int c):INode(f), c(c) {
     }};
 
 struct NodeCmp {
@@ -59,11 +59,11 @@ struct NodeCmp {
         return lhs->f > rhs->f;
     }};
 
-INode *BuildTree(std::map < int, int >&frequencies)
+INode *BuildTree(std::map < unsigned long int, int >&frequencies)
 {
     std::priority_queue < INode *, std::vector < INode * >, NodeCmp > trees;
 
-    for (std::map < int, int >::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
+    for (std::map < unsigned long int, int >::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
         trees.push(new LeafNode(it->second, (int) it->first));
     }
     while (trees.size() > 1) {
@@ -94,32 +94,11 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector < char >&mask, vector < char >&compressed_mask) {
+void encode(vector<unsigned long int>& counters) {
 
-    /*********************************************/
-    // Perform run-length encoding into counters[]
-    /*********************************************/
-
-    char last_bit = 0;
-    int counter = 0;
-    vector < int >counters;
-    std::map < int, int >frequencies;
-    for (unsigned int i = 0; i < mask.size(); ++i) {
-        char c = mask[i];
-        for (int j = 7; j >= 0; --j) {
-            char bit = (c >> j) & 1;
-            if (bit == last_bit)
-                counter++;
-            else {
-                counters.push_back(counter);
-                ++frequencies[counter];
-                counter = 1;
-                last_bit = bit;
-            }
-        }
-    }
-    counters.push_back(counter);
-    ++frequencies[counter];
+    std::map < unsigned long int, int >frequencies;
+    for (unsigned long int i = 0; i < counters.size(); ++i)
+        ++frequencies[counters[i]];
 
     /*******************************/
     // Create the Huffman dictionary
@@ -135,56 +114,111 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
         codes[frequencies.begin()->first].push_back(false);
 
     /**************************************************************************/
-    // Save the dictionary: 27 bits for each translation and the length using 5
+    // Save the dictionary + encoding information:
+    // (1) Number of key/code pairs (int)
+    // (2) For each key/code pair:
+    //         length(key) (char)
+    //         key (sequence of bits)
+    //         length(code) (char)
+    //         code (sequence of bits)
+    // (3) Number N of keys to code (ind_t)
+    // (4) N codes (sequence of bits)
     /**************************************************************************/
 
-    ind_t n_bits = 0;
-    unsigned int key_array[codes.size()];
-    unsigned int code_array[codes.size()];
-    counter = 0;
-    for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
-        int key = (int) (it->first);
-        int cost = it->second.size();
-        key_array[counter] = key;
-        unsigned int encoding = 0;
-        if (it->second.size() > 27) {
-            cout << "Encoding too large (" << it->second.size() << " bits)" << endl;
-            exit(1);
+    unsigned char wbyte = 0;
+    char wbit = 7;
+
+    // Number of key/code pairs
+    unsigned int dict_size = codes.size();
+//    compressed_mask.insert(compressed_mask.end(), &dict_size, (&dict_size)+sizeof(dict_size));
+    for (int rbit = 31; rbit >= 0; --rbit) {
+        wbyte |= ((dict_size >> rbit)&1) << wbit;
+        wbit--;
+        if (wbit < 0) {
+            write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+            wbyte = 0;
+            wbit = 7;
         }
-        for (unsigned int i = 0; i < it->second.size(); ++i)
-            encoding |= it->second[i] << (it->second.size()-1-i);
-        encoding |= (it->second.size() << 27);
-        code_array[counter] = encoding;
-        n_bits += cost * frequencies[key];
-        ++counter;
     }
 
-    /**********************************************/
-    // Save the dictionary and the translated codes
-    /**********************************************/
+    // Key/code pairs
+    for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
 
-    int dict_size = codes.size();
-    compressed_mask = vector < char >((1 + 2 * dict_size) * sizeof(int) + sizeof(n_bits));
-    memcpy(&compressed_mask[0], reinterpret_cast < char *>(&dict_size), sizeof(int));
-    memcpy(&compressed_mask[0] + (1) * sizeof(int), reinterpret_cast < char *>(key_array), dict_size * sizeof(int));
-    memcpy(&compressed_mask[0] + (1 + dict_size) * sizeof(int), reinterpret_cast < char *>(code_array), dict_size * sizeof(int));
-    memcpy(&compressed_mask[0] + (1 + 2 * dict_size) * sizeof(int), reinterpret_cast < char *>(&n_bits), sizeof(n_bits));
+        unsigned long int key = it->first; // TODO change key to ind_t
 
-    char compressed_mask_wbyte = 0;
-    char compressed_mask_wbit = 7;
-    for (unsigned int i = 0; i < counters.size(); ++i) {
-        for (unsigned int j = 0; j < codes[counters[i]].size(); ++j) {
-            compressed_mask_wbyte |= (codes[counters[i]][j] << compressed_mask_wbit);
-            compressed_mask_wbit--;
-            if (compressed_mask_wbit < 0) {
-                compressed_mask.push_back(compressed_mask_wbyte);
-                compressed_mask_wbit = 7;
-                compressed_mask_wbyte = 0;
+        // First, the key's length
+        unsigned int key_len = floor(log2(key)) + 1; // TODO with bit arithmetic
+        for (int rbit = 7; rbit >= 0; --rbit) {
+            wbyte |= ((key_len >> rbit)&1) << wbit;
+            wbit--;
+            if (wbit < 0) {
+                write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+                wbyte = 0;
+                wbit = 7;
+            }
+        }
+
+        // Next, the key itself
+        for (int rbit = key_len-1; rbit >= 0; --rbit) {
+            wbyte |= ((key >> rbit)&1) << wbit;
+            wbit--;
+            if (wbit < 0) {
+                write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+                wbyte = 0;
+                wbit = 7;
+            }
+        }
+
+        // Now, the code's length
+        unsigned int code_len = it->second.size();
+        for (int rbit = 7; rbit >= 0; --rbit) {
+            wbyte |= ((code_len >> rbit)&1) << wbit;
+            wbit--;
+            if (wbit < 0) {
+                write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+                wbyte = 0;
+                wbit = 7;
+            }
+        }
+
+        // Finally, the code itself
+        for (int rbit = code_len-1; rbit >= 0; --rbit) {
+            wbyte |= it->second[code_len-1-rbit] << wbit;
+            wbit--;
+            if (wbit < 0) {
+                write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+                wbyte = 0;
+                wbit = 7;
             }
         }
     }
-    if (compressed_mask_wbit < 7)
-        compressed_mask.push_back(compressed_mask_wbyte);
+
+    // Number N of symbols to code
+    unsigned long int n_symbols = counters.size();
+    for (int rbit = 63; rbit >= 0; --rbit) {
+        wbyte |= ((n_symbols >> rbit)&1) << wbit;
+        wbit--;
+        if (wbit < 0) {
+            write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+            wbyte = 0;
+            wbit = 7;
+        }
+    }
+
+    // Now the N codes
+    for (unsigned long int i = 0; i < counters.size(); ++i) {
+        for (unsigned long int j = 0; j < codes[counters[i]].size(); ++j) {
+            wbyte |= (codes[counters[i]][j] << wbit);
+            wbit--;
+            if (wbit < 0) {
+                write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+                wbit = 7;
+                wbyte = 0;
+            }
+        }
+    }
+    if (wbit < 7)
+        write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
 }
 
 #endif // ENCODE_HPP
