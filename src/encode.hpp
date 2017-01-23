@@ -134,9 +134,9 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
     if (frequencies.size() == 1) // If there's only one symbol, we still need one bit for it
         codes[frequencies.begin()->first].push_back(false);
 
-    /***************************************************************************/
-    // Translate each symbol. Save the code using 27 bits and its length using 5
-    /***************************************************************************/
+    /**************************************************************************/
+    // Save the dictionary: 27 bits for each translation and the length using 5
+    /**************************************************************************/
 
     ind_t n_bits = 0;
     unsigned int key_array[codes.size()];
@@ -174,7 +174,7 @@ void encode(vector < char >&mask, vector < char >&compressed_mask) {
     char compressed_mask_wbit = 7;
     for (unsigned int i = 0; i < counters.size(); ++i) {
         for (unsigned int j = 0; j < codes[counters[i]].size(); ++j) {
-            compressed_mask_wbyte |= codes[counters[i]][j] << compressed_mask_wbit;
+            compressed_mask_wbyte |= (codes[counters[i]][j] << compressed_mask_wbit);
             compressed_mask_wbit--;
             if (compressed_mask_wbit < 0) {
                 compressed_mask.push_back(compressed_mask_wbyte);

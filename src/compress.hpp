@@ -353,7 +353,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         if (mask_wbit < 7)
             mask.push_back(mask_wbyte);
         vector < char >compressed_mask;
-        encode(mask, compressed_mask);
+        encode(mask, compressed_mask); // TODO: predict compressed size and write directly into the zlib stream
 
         chunk_info ci;
         ci.compressed_size = compressed_mask.size();

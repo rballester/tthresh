@@ -103,7 +103,7 @@ void inflate_chunk()
                 throw Z_ERRNO;
             }
             if (zs.strm.avail_in == 0) {
-                cout << "zlib input file stream finished unexpectedly soon" << endl;
+                cout << "Error: zlib input file stream finished unexpectedly soon" << endl;
                 exit(1);
             }
             zs.strm.next_in = zs.inout;
