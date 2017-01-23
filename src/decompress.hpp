@@ -68,6 +68,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     ind_t size = 1;
     for (char i = 0; i < n; ++i)
         size *= s[i];
+    cumulative_size_products(s, n);
     if (debug) {
         cout << "Decompressing a tensor of size " << s[0];
         for (char i = 1; i < n; ++i)

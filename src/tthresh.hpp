@@ -11,6 +11,14 @@ typedef long int ind_t; // Used to index bytes and bits
 
 vector<ind_t> sprod;
 
+void cumulative_size_products(vector<int>& s, char n) {
+    // Compute the cumulative products (useful later on for index computations)
+    sprod = vector<ind_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    sprod[0] = 1;
+    for (char dim = 0; dim < n; ++dim)
+        sprod[dim+1] = sprod[dim]*s[dim];
+}
+
 void print_usage() {
     cout << endl;
     cout << "tthresh: a multidimensional data compressor" << endl;

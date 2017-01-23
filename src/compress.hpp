@@ -190,11 +190,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         delete[]in;
     if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
 
-    // Compute the cumulative products (useful later on for index computations)
-    sprod = vector<ind_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
-    sprod[0] = 1;
-    for (char dim = 0; dim < n; ++dim)
-        sprod[dim+1] = sprod[dim]*s[dim];
+    cumulative_size_products(s, n);
 
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric
