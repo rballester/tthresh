@@ -6,7 +6,7 @@
 
 using namespace std;
 
-void decode(ind_t bytes_to_read, vector < char >&mask) {
+void decode(ind_t bytes_to_read, vector < ind_t >&counters) {
 
     /*********************************************/
     // Read dictionary, encoding size and encoding
@@ -30,11 +30,8 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
     // Read translation and decode each symbol on the spot
     /*****************************************************/
 
-    long int read_bits = 0;
+    ind_t read_bits = 0;
     int this_code = 0;
-    unsigned char current_bit = 0;
-    unsigned char write_byte = 0;
-    int write_bit = 7;
     int this_code_len = 0;
     unordered_map< unsigned long int, unsigned long int>::iterator it;
     for (int i = (1+2*dict_size)*sizeof(int) + sizeof(ind_t); i < bytes_to_read; ++i) {
@@ -44,17 +41,7 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
 
             it = tm[this_code_len].find(this_code); // See if this corresponds to a symbol
             if (it != tm[this_code_len].end()) {
-                // RLE decoding: put as many bits as the decoded integer indicates. TODO: pass the counters instead!
-                for (unsigned int k = 0; k < it->second; ++k) {
-                    write_byte |= current_bit << write_bit;
-                    write_bit--;
-                    if (write_bit < 0) {
-                        mask.push_back((write_byte));
-                        write_byte = 0;
-                        write_bit = 7;
-                    }
-                }
-                current_bit = !current_bit;
+                counters.push_back(it->second);
                 this_code = 0;
                 this_code_len = 0;
             }
@@ -64,8 +51,6 @@ void decode(ind_t bytes_to_read, vector < char >&mask) {
                 break;
         }
     }
-    if (write_bit< 7)
-        mask.push_back(write_byte);
     delete[] buffer;
 }
 

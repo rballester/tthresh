@@ -97,24 +97,27 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         read_zlib_stream(reinterpret_cast < unsigned char *>(&ci), sizeof(chunk_info));
         minimums.push_back(ci.minimum);
         maximums.push_back(ci.maximum);
-        vector < char >mask;
 
-        decode(ci.compressed_size, mask);
+        vector<ind_t> counters;
+        decode(ci.compressed_size, counters);
 
         ind_t ind = 0;
-        for (unsigned int i = 0; i < mask.size() and ind < size; ++i) {	// TODO: sum directly
-            for (char chunk_rbit = 7; chunk_rbit >= 0 and ind < size; --chunk_rbit) {
+        bool current_bit = false;
+        for (unsigned int i = 0; i < counters.size() and ind < size; ++i) {
+            // RLE decoding: put as many bits as the decoded integer indicates. TODO: sum directly
+            for (ind_t counter = 0; counter < counters[i]; ++counter) {
                 while (ind < size and chunk_ids[ind] > 0) // Skip core elements already assigned to a previous chunk
                     ind++;
-                if ((mask[i] >> chunk_rbit) & 1) { // If element "ind" belongs to the current chunk
+                if (current_bit) {
                     chunk_ids[ind] = chunk_num;
                     ++assigned;
                 }
                 ind++;
             }
+            current_bit = !current_bit;
         }
         if (verbose)
-            cout << "Decoded chunk " << int(chunk_num) << ", compressed_size is " << ci.compressed_size << ", mask has " << mask.size() * 8 << " bits, q=" << int (chunk_num - 1) << endl << flush;
+            cout << "Decoded chunk " << int(chunk_num) << ", compressed_size is " << ci.compressed_size << ", q=" << int (chunk_num - 1) << endl << flush;
         ++chunk_num;
     }
     
