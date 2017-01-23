@@ -51,17 +51,17 @@ You are free to **use and modify** the code as long as you mention the origin. I
 
 ### Visual Results (click to enlarge)
 
-"Channel" turbulence timestep from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
+"Channel" turbulence timestep (512x512x512, float) from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
 
-[<img src="https://github.com/rballester/tthresh/blob/master/images/channel.png" width="1024">](https://raw.githubusercontent.com/rballester/tthresh/master/images/channel.png?token=AB6uqZlifcbJR2J7cQikLyVwdXVHaWoFks5Yi1FDwA%3D%3D)
+[<img src="https://github.com/rballester/tthresh/blob/master/images/channel.png" width="1024" title="Channel">](https://github.com/rballester/tthresh/raw/master/images/channel.png)
 
-"Foot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
+"Foot" (256x256x256, uchar) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
 
-[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1024">](https://raw.githubusercontent.com/rballester/tthresh/master/images/foot.png?token=AB6uqQEiEwrYO9kAzUUJJ1VPXm8StfqMks5Yi1HpwA%3D%3D)
+[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1024" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/foot.png)
 
-"Boston teapot" from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
+"Boston teapot" (256x256x178, uchar) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
 
-[<img src="https://github.com/rballester/tthresh/blob/master/images/boston_teapot.png" width="1024">](https://raw.githubusercontent.com/rballester/tthresh/master/images/boston_teapot.png?token=AB6uqVD8-REH39F_alYcSuGNUbvA_qrwks5Yi1HuwA%3D%3D)
+[<img src="https://github.com/rballester/tthresh/blob/master/images/boston_teapot.png" width="1024" title="Boston Teapot">](https://github.com/rballester/tthresh/raw/master/images/boston_teapot.png)
 
 ### Acknowledgment
 
