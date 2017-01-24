@@ -47,12 +47,12 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
             if (q > 0) {
                 q = min(63, q + 2);	// Seems a good compromise
                 unsigned long int to_write;
-                if (q == 63) {
+                if (q == 63)
                     to_write = *reinterpret_cast<unsigned long int*>(&U(i,j));
-                }
                 else {
                     to_write = min(((1UL << q) - 1), (unsigned long int) roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
-                    to_write |= (U(i, j) < 0) * (1UL << q);	// The sign is the first bit to write
+                    if (U(i, j) < 0)
+                        to_write |=  1UL << q;// The sign is the most significant bit
                 }
                 for (char j = q; j >= 0; --j) {
                     matrix_wbyte |= ((to_write >> j) & 1UL) << matrix_wbit;
@@ -66,12 +66,11 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
             }
         }
     }
-    if (matrix_wbit < 7) {
+    if (matrix_wbit < 7)
         write_zlib_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
-    }
 }
 
-double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose, bool debug) {
+double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose=false, bool debug=false) {
 
     if (verbose)
         cout << endl << "/***** Compression *****/" << endl << endl << flush;
@@ -219,7 +218,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         cout << "Decomposing the " << int(n) << "D tensor... " << flush;
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
-    vector<MatrixXd> Us(n);	// Tucker factor matrices
+    vector<MatrixXd> Us(n); // Tucker factor matrices
     hosvd(c, s, Us, true, verbose);
     if (verbose)
         cout << "Done" << endl << flush;

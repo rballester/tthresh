@@ -116,8 +116,8 @@ void inflate_chunk()
             ret = Z_DATA_ERROR;
         if (ret == Z_MEM_ERROR) {
             (void)inflateEnd(&zs.strm);
-	    throw ret;
-	}
+            throw ret;
+        }
         zs.bufstart = 0;
         zs.bufend = CHUNK - zs.strm.avail_out;
 }
