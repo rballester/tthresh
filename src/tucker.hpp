@@ -52,9 +52,10 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
     for (int dim = 1; dim < n; ++dim) {
         if (verbose) cout << "\tUnfold (" << dim+1 << ")... " << flush;
         M = MatrixXd(s[dim], sprod[n]/s[dim]); // dim-th factor matrix
+        #pragma omp parallel for
         for (int j = 0; j < sprod[n]/s[dim-1]; ++j) {
             int write_i = (j/sprod[dim-1]) % s[dim];
-            ind_t base_write_j = j % sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
+            ind_t base_write_j = j%sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
             for (int i = 0; i < s[dim-1]; ++i)
                 M(write_i, base_write_j + i*sprod[dim-1]) = M_proj(i, j);
         }
@@ -65,7 +66,7 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
 
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
-
+    #pragma omp parallel for
     for (int j = 0; j < sprod[n-1]; j++)
         for (int i = 0; i < s[n-1]; i++)
             data[j + i * sprod[n-1]] = M_proj(i, j);

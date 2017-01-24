@@ -39,8 +39,7 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
         zlib_write_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(columns_q[i]));
 
     // Finally the matrix itself, quantized
-    char matrix_wbyte = 0;
-    char matrix_wbit = 7;
+    zlib_open_wbit();
     for (unsigned int j = 0; j < n_columns; ++j) {
         for (unsigned int i = 0; i < n_columns; ++i) {
             char q = columns_q[j];
@@ -54,20 +53,12 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
                     if (U(i, j) < 0)
                         to_write |=  1UL << q;// The sign is the most significant bit
                 }
-                for (char j = q; j >= 0; --j) {
-                    matrix_wbyte |= ((to_write >> j) & 1UL) << matrix_wbit;
-                    matrix_wbit--;
-                    if (matrix_wbit < 0) {
-                        matrix_wbit = 7;
-                        zlib_write_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
-                        matrix_wbyte = 0;
-                    }
-                }
+                for (char j = q; j >= 0; --j)
+                    zlib_write_bit((to_write >> j) & 1UL);
             }
         }
     }
-    if (matrix_wbit < 7)
-        zlib_write_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
+    zlib_close_wbit();
 }
 
 double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose=false, bool debug=false) {
@@ -303,6 +294,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         // If q = 0 there's no need to store anything quantized, not even the sign
         // If q = 63, values are kept as they are (doubles) and we forget about quantization
         if (q > 0 and q < 63) {
+            #pragma omp parallel for
             for (int i = left; i < right; ++i) {
                 unsigned long int to_write = 0;
                 if (chunk_size > 1)
@@ -317,7 +309,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         /********************************************/
         // Save mask and compute RLE+Huffman out of it
         /********************************************/
-
+        #pragma omp parallel for
         for (int i = left; i < right; ++i) {
             unsigned long int index = sorting[i].second;
             chunk_ids[index] = chunk_num;

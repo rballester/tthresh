@@ -123,7 +123,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             cout << "Decoded chunk " << int(chunk_num) << " (q=" << int (chunk_num - 1) << "), minimum=" << minimums[minimums.size()-1] << ", maximum=" << maximums[maximums.size()-1] << endl << flush;
         ++chunk_num;
     }
-    
+
     // Read factor matrices
     if (verbose)
         cout << "Decoding factor matrices... " << flush;
@@ -135,24 +135,16 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     
     // Recover the quantized core and dequantize it
     double *c = new double[size];
-    char core_quant_rbyte = 0;
-    char core_quant_rbit = -1;
+    zlib_open_rbit();
     for (int i = 0; i < size; ++i) {
         int chunk_num = chunk_ids[i];
         char q = chunk_num - 1;
         double chunk_min = minimums[q];
         double chunk_max = maximums[q];
-
         if (q > 0) {
             unsigned long int quant = 0;
-            for (long int j = q; j >= 0; --j) { // Read q bits
-                if (core_quant_rbit < 0) {
-                    zlib_read_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte));
-                    core_quant_rbit = 7;
-                }
-                quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;
-                core_quant_rbit--;
-            }
+            for (long int j = q; j >= 0; --j) // Read q bits
+                quant |= (unsigned long int)(zlib_read_bit()) << j;
             if (q == 63) // The core value is read verbatim as a double and we get 0 error
                 memcpy(&c[i], (void*)&quant, sizeof(quant));
             else { // We dequantize this core value
