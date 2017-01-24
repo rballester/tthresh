@@ -16,12 +16,12 @@ void decode_factor(MatrixXd & U, int n_columns) {
 
     // First, the matrix's maximum, used for quantization
     double maximum;
-    read_zlib_stream(reinterpret_cast<unsigned char*> (&maximum), sizeof(maximum));
+    zlib_read_stream(reinterpret_cast<unsigned char*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
     vector < char >U_q(n_columns);
     for (int i = 0; i < n_columns; ++i)
-        read_zlib_stream(reinterpret_cast<unsigned char*> (&U_q[i]), sizeof(U_q[i]));
+        zlib_read_stream(reinterpret_cast<unsigned char*> (&U_q[i]), sizeof(U_q[i]));
 
     // Finally we can dequantize the matrix
     char matrix_rbyte;
@@ -35,7 +35,7 @@ void decode_factor(MatrixXd & U, int n_columns) {
                 for (char j = q; j >= 0; --j) {
                     if (matrix_rbit < 0) {
                         matrix_rbit = 7;
-                        read_zlib_stream(reinterpret_cast<unsigned char*> (&matrix_rbyte), sizeof(matrix_rbyte));
+                        zlib_read_stream(reinterpret_cast<unsigned char*> (&matrix_rbyte), sizeof(matrix_rbyte));
                     }
                     quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
                     matrix_rbit--;
@@ -60,11 +60,11 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << endl << "/***** Decompression *****/" << endl << endl << flush;
     
     // Read output tensor dimensionality, sizes and type
-    open_zlib_read_stream(compressed_file);
+    open_zlib_read(compressed_file);
     char n;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&n), sizeof(n));
+    zlib_read_stream(reinterpret_cast < unsigned char *>(&n), sizeof(n));
     vector < int >s(n);
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&s[0]), n * sizeof(s[0]));
+    zlib_read_stream(reinterpret_cast < unsigned char *>(&s[0]), n * sizeof(s[0]));
     ind_t size = 1;
     for (char i = 0; i < n; ++i)
         size *= s[i];
@@ -76,7 +76,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << "..." << endl;
     }
     char io_type_code;
-    read_zlib_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(io_type_code));
+    zlib_read_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(io_type_code));
     char io_type_size;
     if (io_type_code == 0)
         io_type_size = sizeof(unsigned char);
@@ -94,12 +94,11 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     char chunk_num = 1;
     ind_t assigned = 0;
     while(assigned < size) {
-
         double chunk_min;
-        read_zlib_stream(reinterpret_cast < unsigned char *>(&chunk_min), sizeof(chunk_min));
+        zlib_read_stream(reinterpret_cast < unsigned char *>(&chunk_min), sizeof(chunk_min));
         minimums.push_back(chunk_min);
         double chunk_max;
-        read_zlib_stream(reinterpret_cast < unsigned char *>(&chunk_max), sizeof(chunk_max));
+        zlib_read_stream(reinterpret_cast < unsigned char *>(&chunk_max), sizeof(chunk_max));
         maximums.push_back(chunk_max);
 
         vector<ind_t> counters;
@@ -148,7 +147,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             unsigned long int quant = 0;
             for (long int j = q; j >= 0; --j) { // Read q bits
                 if (core_quant_rbit < 0) {
-                    read_zlib_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte), chunk_num==64);
+                    zlib_read_stream(reinterpret_cast<unsigned char*> (&core_quant_rbyte), sizeof(core_quant_rbyte));
                     core_quant_rbit = 7;
                 }
                 quant |= ((core_quant_rbyte >> core_quant_rbit) & 1UL) << j;
@@ -166,7 +165,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         } else
             c[i] = 0;
     }
-    close_zlib_read_stream();
+    close_zlib_read();
 
     if (verbose)
         cout << "Reconstructing tensor... " << flush;

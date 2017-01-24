@@ -94,19 +94,6 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-unsigned char wbyte;
-char wbit;
-
-void inline write_bit(char bit) {
-    wbyte |= bit << wbit;
-    wbit--;
-    if (wbit < 0) {
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
-        wbyte = 0;
-        wbit = 7;
-    }
-}
-
 void encode(vector<unsigned long int>& counters) {
 
     std::map < unsigned long int, int >frequencies;
@@ -138,13 +125,12 @@ void encode(vector<unsigned long int>& counters) {
     // (4) N codes (sequence of bits)
     /**************************************************************************/
 
-    wbyte = 0;
-    wbit = 7;
+    zlib_open_wbit();
 
     // Number of key/code pairs
     unsigned int dict_size = codes.size();
     for (int rbit = 31; rbit >= 0; --rbit)
-        write_bit((dict_size >> rbit)&1);
+        zlib_write_bit((dict_size >> rbit)&1);
 
     // Key/code pairs
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
@@ -154,35 +140,33 @@ void encode(vector<unsigned long int>& counters) {
         // First, the key's length
         unsigned int key_len = floor(log2(key)) + 1; // TODO with bit arithmetic
         for (int rbit = 7; rbit >= 0; --rbit)
-            write_bit((key_len >> rbit)&1);
+            zlib_write_bit((key_len >> rbit)&1);
 
         // Next, the key itself
         for (int rbit = key_len-1; rbit >= 0; --rbit)
-            write_bit((key >> rbit)&1);
+            zlib_write_bit((key >> rbit)&1);
 
         // Now, the code's length
         unsigned int code_len = it->second.size();
         for (int rbit = 7; rbit >= 0; --rbit)
-            write_bit((code_len >> rbit)&1);
+            zlib_write_bit((code_len >> rbit)&1);
 
         // Finally, the code itself
         for (int rbit = code_len-1; rbit >= 0; --rbit)
-            write_bit(it->second[code_len-1-rbit]);
+            zlib_write_bit(it->second[code_len-1-rbit]);
     }
 
     // Number N of symbols to code
     unsigned long int n_symbols = counters.size();
     for (int rbit = 63; rbit >= 0; --rbit)
-        write_bit((n_symbols >> rbit)&1);
+        zlib_write_bit((n_symbols >> rbit)&1);
 
     // Now the N codes
     for (unsigned long int i = 0; i < counters.size(); ++i)
         for (unsigned long int j = 0; j < codes[counters[i]].size(); ++j)
-            write_bit(codes[counters[i]][j]);
+            zlib_write_bit(codes[counters[i]][j]);
 
-    // Write any reamining bits
-    if (wbit < 7)
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&wbyte), sizeof(wbyte));
+    zlib_close_wbit();
 }
 
 #endif // ENCODE_HPP

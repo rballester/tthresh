@@ -25,6 +25,8 @@ ind_t min(ind_t a, ind_t b) {
 }
 
 struct {
+    unsigned char rbyte, wbyte;
+    char rbit, wbit;
     FILE *file; // File handle to read/write from/to
     unsigned char inout[CHUNK]; // Buffer to write the results of inflation/deflation
     unsigned char buf[CHUNK]; // Buffer used for the read/write operations
@@ -55,9 +57,11 @@ int deflate_chunk(ind_t bytes_to_write, int flush)
     return ret;
 }
 
-void open_zlib_write_stream(string output_file)
+void open_zlib_write(string output_file)
 {
     SET_BINARY_MODE(output_file.c_str());
+    zs.wbyte = 0;
+    zs.wbit = 7;
     zs.file = fopen(output_file.c_str(), "w");
     zs.strm.zalloc = Z_NULL;
     zs.strm.zfree = Z_NULL;
@@ -67,8 +71,9 @@ void open_zlib_write_stream(string output_file)
         throw ret;
 }
 
-void write_zlib_stream(unsigned char *buf, ind_t bytes_to_write)
+void zlib_write_stream(unsigned char *buf, ind_t bytes_to_write)
 {
+    assert(zs.wbit == 7); // One shouldn't want to write a stream in the middle of individual bits
     while (bytes_to_write > 0) {
         unsigned long int to_copy = min(bytes_to_write, CHUNK-zs.bufend);
         memcpy(zs.buf + zs.bufend, buf, to_copy);
@@ -82,7 +87,7 @@ void write_zlib_stream(unsigned char *buf, ind_t bytes_to_write)
     }
 }
 
-void close_zlib_write_stream() {
+void close_zlib_write() {
     int ret = deflate_chunk(zs.bufend, Z_FINISH);
     if (ret != Z_STREAM_END) /* stream will be complete */
         throw ret;
@@ -90,6 +95,29 @@ void close_zlib_write_stream() {
     (void)deflateEnd(&(zs.strm));
     fclose(zs.file);
 }
+
+void zlib_open_wbit() {
+    zs.wbyte = 0;
+    zs.wbit = 7;
+}
+
+void inline zlib_write_bit(char bit)
+{
+    zs.wbyte |= bit << zs.wbit;
+    zs.wbit--;
+    if (zs.wbit < 0) {
+        zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbyte), sizeof(zs.wbyte));
+        zs.wbyte = 0;
+        zs.wbit = 7;
+    }
+}
+
+void zlib_close_wbit() {
+    // Write any reamining bits
+    if (zs.wbit < 7)
+        zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbyte), sizeof(zs.wbyte));
+}
+
 
 // If there are no more bytes to inflate, it reads CHUNK bytes (or as many as there are left)
 // Then, it inflates up to CHUNK bytes
@@ -122,7 +150,7 @@ void inflate_chunk()
         zs.bufend = CHUNK - zs.strm.avail_out;
 }
 
-void open_zlib_read_stream(string input_file)
+void open_zlib_read(string input_file)
 {
     SET_BINARY_MODE(input_file.c_str());
     zs.file = fopen(input_file.c_str(), "r");
@@ -140,7 +168,7 @@ void open_zlib_read_stream(string input_file)
         throw ret;
 }
 
-void read_zlib_stream(unsigned char *buf, unsigned long int bytes_to_read, bool flag=false)
+void zlib_read_stream(unsigned char *buf, unsigned long int bytes_to_read)
 {
     while (bytes_to_read > 0) {
         if (zs.bufstart == zs.bufend) // The buffer is empty
@@ -153,11 +181,24 @@ void read_zlib_stream(unsigned char *buf, unsigned long int bytes_to_read, bool 
     }
 }
 
-void close_zlib_read_stream()
+void close_zlib_read()
 {
     /* clean up */
     (void)inflateEnd(&zs.strm);
     fclose(zs.file);
+}
+
+void zlib_open_rbit() {
+    zs.rbyte = 0;
+    zs.rbit = -1;
+}
+
+char inline zlib_read_bit() {
+    if (zs.rbit < 0) {
+        zlib_read_stream(reinterpret_cast < unsigned char *>(&zs.rbyte), sizeof(zs.rbyte));
+        zs.rbit = 7;
+    }
+    return (zs.rbyte >> zs.rbit--)&1;
 }
 
 #endif // ZLIB_IO_HPP

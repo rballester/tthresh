@@ -32,11 +32,11 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
-    write_zlib_stream(reinterpret_cast< unsigned char *> (&maximum), sizeof(maximum));
+    zlib_write_stream(reinterpret_cast< unsigned char *> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
     for (unsigned int i = 0; i < n_columns; ++i)
-        write_zlib_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(columns_q[i]));
+        zlib_write_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(columns_q[i]));
 
     // Finally the matrix itself, quantized
     char matrix_wbyte = 0;
@@ -59,7 +59,7 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
                     matrix_wbit--;
                     if (matrix_wbit < 0) {
                         matrix_wbit = 7;
-                        write_zlib_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
+                        zlib_write_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
                         matrix_wbyte = 0;
                     }
                 }
@@ -67,7 +67,7 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
         }
     }
     if (matrix_wbit < 7)
-        write_zlib_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
+        zlib_write_stream(reinterpret_cast< unsigned char *> (&matrix_wbyte), sizeof(matrix_wbyte));
 }
 
 double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose=false, bool debug=false) {
@@ -142,10 +142,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Save tensor dimensionality, sizes and type
     /********************************************/
 
-    open_zlib_write_stream(compressed_file.c_str());
-    write_zlib_stream(reinterpret_cast < unsigned char *> (&n), sizeof(n));
-    write_zlib_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(s[0]));
-    write_zlib_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(io_type_code));
+    open_zlib_write(compressed_file.c_str());
+    zlib_write_stream(reinterpret_cast < unsigned char *> (&n), sizeof(n));
+    zlib_write_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(s[0]));
+    zlib_write_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(io_type_code));
 
     /*****************************/
     // Load input file into memory
@@ -156,7 +156,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     input_stream.read(in, size * io_type_size);
     input_stream.close();
 
-    // Cast the tensor to doubles
+    // Cast the data to doubles
     double *data;
     double datamin = numeric_limits < double >::max(); // Tensor statistics
     double datamax = numeric_limits < double >::min();
@@ -352,8 +352,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         }
         counters.push_back(counter);
 
-        write_zlib_stream(reinterpret_cast<unsigned char*> (&chunk_min), sizeof(chunk_min));
-        write_zlib_stream(reinterpret_cast<unsigned char*> (&chunk_max), sizeof(chunk_max));
+        zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_min), sizeof(chunk_min));
+        zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_max), sizeof(chunk_max));
         encode(counters);
 
         if (verbose) {
@@ -406,7 +406,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                 core_quant_wbyte |= ((*reinterpret_cast < unsigned long int* >(&c[i]) >> j) &1UL) << core_quant_wbit;
                 core_quant_wbit--;
                 if (core_quant_wbit < 0) {
-                    write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+                    zlib_write_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
                     core_quant_wbyte = 0;
                     core_quant_wbit = 7;
                 }
@@ -414,11 +414,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         }
     }
     if (core_quant_wbit < 7)
-        write_zlib_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+        zlib_write_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
     if (verbose)
         cout << "Done" << endl << flush;
     delete[] c;
-    close_zlib_write_stream();
+    close_zlib_write();
 
     /******************************************************************/
     // Compute and display statistics of the resulting compression rate

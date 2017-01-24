@@ -65,6 +65,7 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
 
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
+
     for (int j = 0; j < sprod[n-1]; j++)
         for (int i = 0; i < s[n-1]; i++)
             data[j + i * sprod[n-1]] = M_proj(i, j);
