@@ -220,7 +220,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         cout << "Sorting core's absolute values... " << flush;
-    vector < pair < double, ind_t >>sorting(size);
+    vector< pair<double,ind_t>> sorting(size);
     for (ind_t i = 0; i < size; ++i)
         sorting[i] = pair < double, ind_t >(abs(c[i]), i);
     sort(sorting.begin(), sorting.end());
@@ -236,11 +236,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     ind_t left = 0;
     ind_t old_right = left;	// Inclusive bound
     ind_t right = left;	// Exclusive bound
-    vector < char >chunk_ids(size, 0);
+    vector<char> chunk_ids(size, 0);
     char chunk_num = 1;
-    vector < vector < char >>Us_q(n);
+    vector< vector<char> > Us_q(n);
     for (char i = 0; i < n; ++i)
-        Us_q[i] = vector < char >(s[i], 0);
+        Us_q[i] = vector<char> (s[i], 0);
 
     while (left < size) {
         while (left < size and q < 63) {
@@ -250,7 +250,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             double sse = 0;
             if (right > left + 1) {
                 if (q > 0) {
-                    for (ind_t i = left; i < right; ++i) { // TODO: Can we approximate the error due to quantization?
+                    // Compute the quantization error. It could also be approximated  as follows:
+                    // double k = (chunk_max - chunk_min)/double(1<<q); // Quantization resolution
+                    // mse = k*k/12; // Expected L2 error: $(\int_{-k/2}^{k/2} x^2 dx)/k$
+                    // But that tends to underestimate the error
+                    for (ind_t i = left; i < right; ++i) {
                         unsigned long int quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
                         double dequant = quant * (chunk_max - chunk_min) / ((1UL << q) - 1.) + chunk_min;
                         sse += (sorting[i].first - dequant) * (sorting[i].first - dequant);
@@ -301,7 +305,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                     // The following min() prevents overflowing the q-bit representation when converting double -> long int
                     to_write = min(((1UL << q) - 1), (unsigned long int)
                                    roundl((sorting[i].first - chunk_min) / (chunk_max - chunk_min) * ((1UL << q) - 1)));
-                to_write |= (c[sorting[i].second] < 0) * (1UL << q);
+                if (c[sorting[i].second] < 0)
+                    to_write |= 1UL << q;
                 memcpy(&c[sorting[i].second], (void*)&to_write, sizeof(to_write));
             }
         }
@@ -388,25 +393,15 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         cout << "Saving core quantization... " << flush;
-    unsigned char core_quant_wbyte = 0;
-    char core_quant_wbit = 7;
+    zlib_open_wbit();
     for (ind_t i = 0; i < size; ++i) {
-        chunk_num = chunk_ids[i];
-        char q = chunk_num - 1;
+        char q = chunk_ids[i] - 1;
         if (q > 0) {
-            for (char j = q; j >= 0; --j) {
-                core_quant_wbyte |= ((*reinterpret_cast < unsigned long int* >(&c[i]) >> j) &1UL) << core_quant_wbit;
-                core_quant_wbit--;
-                if (core_quant_wbit < 0) {
-                    zlib_write_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
-                    core_quant_wbyte = 0;
-                    core_quant_wbit = 7;
-                }
-            }
+            for (char j = q; j >= 0; --j)
+                zlib_write_bit((*reinterpret_cast < unsigned long int* >(&c[i]) >> j)&1UL);
         }
     }
-    if (core_quant_wbit < 7)
-        zlib_write_stream(reinterpret_cast < unsigned char *> (&core_quant_wbyte), sizeof(char));
+    zlib_close_wbit();
     if (verbose)
         cout << "Done" << endl << flush;
     delete[] c;

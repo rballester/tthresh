@@ -1,6 +1,7 @@
 #ifndef __TUCKER_HPP__
 #define __TUCKER_HPP__
 
+#include <chrono>
 #include <Eigen/Dense>
 
 using namespace std;
@@ -53,9 +54,9 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
         if (verbose) cout << "\tUnfold (" << dim+1 << ")... " << flush;
         M = MatrixXd(s[dim], sprod[n]/s[dim]); // dim-th factor matrix
         #pragma omp parallel for
-        for (int j = 0; j < sprod[n]/s[dim-1]; ++j) {
+        for (long int j = 0; j < sprod[n]/s[dim-1]; ++j) {
             int write_i = (j/sprod[dim-1]) % s[dim];
-            ind_t base_write_j = j%sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
+            long int base_write_j = j%sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
             for (int i = 0; i < s[dim-1]; ++i)
                 M(write_i, base_write_j + i*sprod[dim-1]) = M_proj(i, j);
         }
@@ -67,9 +68,9 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
     #pragma omp parallel for
-    for (int j = 0; j < sprod[n-1]; j++)
-        for (int i = 0; i < s[n-1]; i++)
-            data[j + i * sprod[n-1]] = M_proj(i, j);
+    for (int i = 0; i < s[n-1]; i++)
+        for (long int j = 0; j < sprod[n-1]; j++)
+            data[i*sprod[n-1] + j] = M_proj(i, j);
 }
 
 #endif // TUCKER_HPP
