@@ -2,7 +2,11 @@
 #define __TTHRESH_HPP__
 
 #include <vector>
+#include <stack>
+#include <chrono>
+#include <string>
 using namespace std;
+using namespace std::chrono;
 
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
@@ -10,6 +14,18 @@ enum Target { eps, rmse, psnr };
 typedef long int ind_t; // Used to index bytes and bits
 
 vector<ind_t> sprod;
+
+stack<high_resolution_clock::time_point> times;
+void start_timer(string message) {
+    cout << message << flush;
+    times.push(std::chrono::high_resolution_clock::now());
+}
+
+void stop_timer() {
+    auto elapsed = std::chrono::high_resolution_clock::now() - times.top();
+    times.pop();
+    cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << endl << flush;
+}
 
 void cumulative_size_products(vector<int>& s, char n) {
     // Compute the cumulative products (useful later on for index computations)

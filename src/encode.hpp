@@ -129,8 +129,7 @@ void encode(vector<unsigned long int>& counters) {
 
     // Number of key/code pairs
     unsigned int dict_size = codes.size();
-    for (int rbit = 31; rbit >= 0; --rbit)
-        zlib_write_bit((dict_size >> rbit)&1);
+    zlib_write_bit(dict_size, sizeof(int)*8);
 
     // Key/code pairs
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
@@ -139,32 +138,28 @@ void encode(vector<unsigned long int>& counters) {
 
         // First, the key's length
         unsigned int key_len = floor(log2(key)) + 1; // TODO with bit arithmetic
-        for (int rbit = 7; rbit >= 0; --rbit)
-            zlib_write_bit((key_len >> rbit)&1);
+        zlib_write_bit(key_len, sizeof(char)*8);
 
         // Next, the key itself
-        for (int rbit = key_len-1; rbit >= 0; --rbit)
-            zlib_write_bit((key >> rbit)&1);
+        zlib_write_bit(key, key_len);
 
         // Now, the code's length
         unsigned int code_len = it->second.size();
-        for (int rbit = 7; rbit >= 0; --rbit)
-            zlib_write_bit((code_len >> rbit)&1);
+        zlib_write_bit(code_len, sizeof(char)*8);
 
         // Finally, the code itself
         for (int rbit = code_len-1; rbit >= 0; --rbit)
-            zlib_write_bit(it->second[code_len-1-rbit]);
+            zlib_write_bit(it->second[code_len-1-rbit], 1);
     }
 
     // Number N of symbols to code
     unsigned long int n_symbols = counters.size();
-    for (int rbit = 63; rbit >= 0; --rbit)
-        zlib_write_bit((n_symbols >> rbit)&1);
+    zlib_write_bit(n_symbols, sizeof(n_symbols)*8);
 
     // Now the N codes
     for (unsigned long int i = 0; i < counters.size(); ++i)
         for (unsigned long int j = 0; j < codes[counters[i]].size(); ++j)
-            zlib_write_bit(codes[counters[i]][j]);
+            zlib_write_bit(codes[counters[i]][j], 1);
 
     zlib_close_wbit();
 }

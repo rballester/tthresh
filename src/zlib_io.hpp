@@ -19,13 +19,14 @@
 #endif
 
 #define CHUNK (1<<18)
+#define BITS int(sizeof(unsigned long int)*8) // Number of buffer bits for bitwise I/O
 
 ind_t min(ind_t a, ind_t b) {
     return (a < b) ? a : b;
 }
 
 struct {
-    unsigned char rbyte, wbyte;
+    unsigned long int rbytes, wbytes;
     char rbit, wbit;
     FILE *file; // File handle to read/write from/to
     unsigned char inout[CHUNK]; // Buffer to write the results of inflation/deflation
@@ -60,7 +61,7 @@ int deflate_chunk(ind_t bytes_to_write, int flush)
 void open_zlib_write(string output_file)
 {
     SET_BINARY_MODE(output_file.c_str());
-    zs.wbyte = 0;
+    zs.wbytes = 0;
     zs.wbit = 7;
     zs.file = fopen(output_file.c_str(), "w");
     zs.strm.zalloc = Z_NULL;
@@ -73,9 +74,9 @@ void open_zlib_write(string output_file)
 
 void zlib_write_stream(unsigned char *buf, ind_t bytes_to_write)
 {
-    assert(zs.wbit == 7); // One shouldn't want to write a stream in the middle of individual bits
+    assert(zs.wbit == BITS-1); // One shouldn't want to write a stream in the middle of individual bits
     while (bytes_to_write > 0) {
-        unsigned long int to_copy = min(bytes_to_write, CHUNK-zs.bufend);
+        long int to_copy = min(bytes_to_write, CHUNK-zs.bufend);
         memcpy(zs.buf + zs.bufend, buf, to_copy);
         zs.bufend += to_copy;
         buf += to_copy;
@@ -97,27 +98,32 @@ void close_zlib_write() {
 }
 
 void zlib_open_wbit() {
-    zs.wbyte = 0;
-    zs.wbit = 7;
+    zs.wbytes = 0;
+    zs.wbit = BITS-1;
 }
 
-void inline zlib_write_bit(char bit)
-{
-    zs.wbyte |= bit << zs.wbit;
-    zs.wbit--;
-    if (zs.wbit < 0) {
-        zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbyte), sizeof(zs.wbyte));
-        zs.wbyte = 0;
-        zs.wbit = 7;
+// Assumption: to_write <= BITS
+void zlib_write_bit(unsigned long int bits, char to_write) {
+    if (to_write <= zs.wbit+1) {
+        zs.wbytes |= bits << (zs.wbit+1-to_write);
+        zs.wbit -= to_write;
+    }
+    else {
+        if (zs.wbit > -1)
+            zs.wbytes |= bits >> (to_write-(zs.wbit+1));
+        zlib_write_stream(reinterpret_cast<unsigned char *> (&zs.wbytes), sizeof(zs.wbytes));
+        to_write -= zs.wbit+1;
+        zs.wbytes = 0;
+        zs.wbytes |= bits << (BITS-to_write);
+        zs.wbit = BITS-1-to_write;
     }
 }
 
 void zlib_close_wbit() {
     // Write any reamining bits
-    if (zs.wbit < 7)
-        zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbyte), sizeof(zs.wbyte));
+    if (zs.wbit < BITS-1)
+        zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbytes), sizeof(zs.wbytes));
 }
-
 
 // If there are no more bytes to inflate, it reads CHUNK bytes (or as many as there are left)
 // Then, it inflates up to CHUNK bytes
@@ -189,16 +195,26 @@ void close_zlib_read()
 }
 
 void zlib_open_rbit() {
-    zs.rbyte = 0;
+    zs.rbytes = 0;
     zs.rbit = -1;
 }
 
-char inline zlib_read_bit() {
-    if (zs.rbit < 0) {
-        zlib_read_stream(reinterpret_cast < unsigned char *>(&zs.rbyte), sizeof(zs.rbyte));
-        zs.rbit = 7;
+// Assumption: to_read <= BITS
+unsigned long int zlib_read_bits(char to_read) {
+    unsigned long int result = 0;
+    if (to_read <= zs.rbit+1) {
+        result = zs.rbytes << (BITS-1-zs.rbit) >> (BITS-to_read);
+        zs.rbit -= to_read;
     }
-    return (zs.rbyte >> zs.rbit--)&1;
+    else {
+        if (zs.rbit > -1)
+            result = zs.rbytes << (BITS-zs.rbit-1) >> (BITS-to_read);
+        zlib_read_stream(reinterpret_cast<unsigned char *> (&zs.rbytes), sizeof(zs.rbytes));
+        to_read -= zs.rbit+1;
+        result |= zs.rbytes >> (BITS-to_read);
+        zs.rbit = BITS-1-to_read;
+    }
+    return result;
 }
 
 #endif // ZLIB_IO_HPP

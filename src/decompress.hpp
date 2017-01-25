@@ -24,22 +24,13 @@ void decode_factor(MatrixXd & U, int n_columns) {
         zlib_read_stream(reinterpret_cast<unsigned char*> (&U_q[i]), sizeof(U_q[i]));
 
     // Finally we can dequantize the matrix
-    char matrix_rbyte;
-    char matrix_rbit = -1;
+    zlib_open_rbit();
     for (int j = 0; j < n_columns; ++j) {
         for (int i = 0; i < n_columns; ++i) {
             char q = U_q[j];
             if (q > 0) {
                 q = min(63, q + 2);
-                unsigned long int quant = 0;
-                for (char j = q; j >= 0; --j) {
-                    if (matrix_rbit < 0) {
-                        matrix_rbit = 7;
-                        zlib_read_stream(reinterpret_cast<unsigned char*> (&matrix_rbyte), sizeof(matrix_rbyte));
-                    }
-                    quant |= ((matrix_rbyte >> matrix_rbit) & 1UL) << j;
-                    matrix_rbit--;
-                }
+                unsigned long int quant = zlib_read_bits(q+1);
                 if (q == 63) // The matrix value is read verbatim as a double and we get 0 error
                     memcpy(&U(i, j), (void*)&quant, sizeof(quant));
                 else { // We dequantize this matrix value
@@ -134,17 +125,16 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         cout << "Done" << endl << flush;
     
     // Recover the quantized core and dequantize it
+    if (verbose)
+        start_timer("Dequantizing core... ");
     double *c = new double[size];
     zlib_open_rbit();
     for (int i = 0; i < size; ++i) {
-        int chunk_num = chunk_ids[i];
-        char q = chunk_num - 1;
-        double chunk_min = minimums[q];
-        double chunk_max = maximums[q];
+        char q = chunk_ids[i] - 1;
         if (q > 0) {
-            unsigned long int quant = 0;
-            for (long int j = q; j >= 0; --j) // Read q bits
-                quant |= (unsigned long int)(zlib_read_bit()) << j;
+	    double chunk_min = minimums[q];
+	    double chunk_max = maximums[q];
+            unsigned long int quant = zlib_read_bits(q+1);
             if (q == 63) // The core value is read verbatim as a double and we get 0 error
                 memcpy(&c[i], (void*)&quant, sizeof(quant));
             else { // We dequantize this core value
@@ -158,6 +148,8 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             c[i] = 0;
     }
     close_zlib_read();
+    if (verbose)
+        stop_timer();
 
     if (verbose)
         cout << "Reconstructing tensor... " << flush;
@@ -165,6 +157,8 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (verbose)
         cout << "Done" << endl << flush;
 
+    if (verbose)
+        cout << "Casting and saving final result... " << flush;
     ofstream output_stream(output_file.c_str(), ios::out | ios::binary);
     unsigned long int buf_elems = CHUNK;
     char *buffer = new char[io_type_size * buf_elems];
@@ -200,6 +194,8 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         output_stream.write(buffer, io_type_size * buffer_wpos);
     delete[] buffer;
     output_stream.close();
+    if (verbose)
+        cout << "Done" << endl << flush;
 
     if (data != NULL) {	// If the uncompressed input is available, we compute the error statistics
         datanorm = sqrt(datanorm);

@@ -53,8 +53,7 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
                     if (U(i, j) < 0)
                         to_write |=  1UL << q;// The sign is the most significant bit
                 }
-                for (char j = q; j >= 0; --j)
-                    zlib_write_bit((to_write >> j) & 1UL);
+                zlib_write_bit(to_write, q+1);
             }
         }
     }
@@ -381,29 +380,27 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     }
 
     if (verbose)
-        cout << "Encoding factor matrices... " << flush;
+        start_timer("Encoding factor matrices... ");
     for (char i = 0; i < n; ++i)
         encode_factor(Us[i], s[i], Us_q[i]);
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
 
     /************************/
     // Save the core encoding
     /************************/
 
     if (verbose)
-        cout << "Saving core quantization... " << flush;
+        start_timer("Saving core quantization... ");
     zlib_open_wbit();
     for (ind_t i = 0; i < size; ++i) {
         char q = chunk_ids[i] - 1;
-        if (q > 0) {
-            for (char j = q; j >= 0; --j)
-                zlib_write_bit((*reinterpret_cast < unsigned long int* >(&c[i]) >> j)&1UL);
-        }
+        if (q > 0)
+            zlib_write_bit(*reinterpret_cast < unsigned long int* >(&c[i]), q+1);
     }
     zlib_close_wbit();
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
     delete[] c;
     close_zlib_write();
 
