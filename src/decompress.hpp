@@ -117,12 +117,12 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 
     // Read factor matrices
     if (verbose)
-        cout << "Decoding factor matrices... " << flush;
+        start_timer("Decoding factor matrices... ");
     vector < MatrixXd > Us(n);
     for (char i = 0; i < n; ++i)
         decode_factor(Us[i], s[i]);
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
     
     // Recover the quantized core and dequantize it
     if (verbose)
@@ -152,13 +152,13 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         stop_timer();
 
     if (verbose)
-        cout << "Reconstructing tensor... " << flush;
+        start_timer("Reconstructing tensor... ");
     hosvd(c, s, Us, false, verbose);
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
 
     if (verbose)
-        cout << "Casting and saving final result... " << flush;
+        start_timer("Casting and saving final result... ");
     ofstream output_stream(output_file.c_str(), ios::out | ios::binary);
     unsigned long int buf_elems = CHUNK;
     char *buffer = new char[io_type_size * buf_elems];
@@ -195,7 +195,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     delete[] buffer;
     output_stream.close();
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
 
     if (data != NULL) {	// If the uncompressed input is available, we compute the error statistics
         datanorm = sqrt(datanorm);

@@ -11,9 +11,7 @@ void decode(vector<ind_t>& counters) {
     zlib_open_rbit();
 
     // Number of key/code pairs
-    int dict_size = 0;
-    for (int wbit = 31; wbit >= 0; --wbit)
-        dict_size |= zlib_read_bits(1) << wbit;
+    int dict_size = zlib_read_bits(sizeof(int)*8);
 
     // Key/code pairs
     vector< unordered_map<unsigned long int, unsigned long int> > tm;
@@ -21,35 +19,25 @@ void decode(vector<ind_t>& counters) {
     for (int i = 0; i < dict_size; ++i) {
 
         // First, the key's length
-        unsigned int key_len = 0;
-        for (int wbit = 7; wbit >= 0; --wbit)
-            key_len |= zlib_read_bits(1) << wbit;
+        unsigned char key_len = zlib_read_bits(6);
 
         // Next, the key itself
-        unsigned long int key = 0;
-        for (int wbit = key_len-1; wbit >= 0; --wbit)
-            key |= zlib_read_bits(1) << wbit;
+        unsigned long int key = zlib_read_bits(key_len);
 
         // Now, the code's length
-        unsigned int code_len = 0;
-        for (int wbit = 7; wbit >= 0; --wbit)
-            code_len |= zlib_read_bits(1) << wbit;
+        unsigned char code_len = zlib_read_bits(6);
 
         // Finally, the code itself
-        unsigned long int code = 0;
-        for (int wbit = code_len-1; wbit >= 0; --wbit)
-            code |= zlib_read_bits(1) << wbit;
+        unsigned long int code = zlib_read_bits(code_len);
 
         // Store the key/code pair in the appropriate table
-        if (tm.size() < code_len+1)
+        if (tm.size() <= code_len)
             tm.resize(code_len+1, unordered_map<unsigned long int, unsigned long int>());
         tm[code_len][code] = key;
     }
 
     // Number of symbols to translate back
-    unsigned long int n_symbols = 0;
-    for (int wbit = 63; wbit >= 0; --wbit)
-        n_symbols |= zlib_read_bits(1) << wbit;
+    unsigned long int n_symbols = zlib_read_bits(sizeof(n_symbols)*8);
 
     // Decoding
     unsigned long int code = 0;

@@ -205,26 +205,26 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /*********************************/
 
     if (verbose)
-        cout << "Decomposing the " << int(n) << "D tensor... " << flush;
+        start_timer("Decomposing the " + to_string(n) + "D tensor... ");
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
     vector<MatrixXd> Us(n); // Tucker factor matrices
     hosvd(c, s, Us, true, verbose);
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
 
     /***********************************/
     // Sort abs(core) in ascending order
     /***********************************/
 
     if (verbose)
-        cout << "Sorting core's absolute values... " << flush;
+        start_timer("Sorting core's absolute values... ");
     vector< pair<double,ind_t>> sorting(size);
     for (ind_t i = 0; i < size; ++i)
         sorting[i] = pair < double, ind_t >(abs(c[i]), i);
     sort(sorting.begin(), sorting.end());
     if (verbose)
-        cout << "Done" << endl << flush;
+        stop_timer();
 
     /************************************************/
     // Generate adaptive chunks from the sorted curve

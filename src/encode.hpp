@@ -16,10 +16,8 @@
 
 using namespace std;
 
-typedef
-std::vector < bool > HuffCode;
-typedef
-std::map < unsigned long int, HuffCode > HuffCodeMap;
+typedef std::vector < bool > HuffCode;
+typedef std::map < unsigned long int, unsigned long int > HuffCodeMap;
 
 class INode {
 public:
@@ -79,24 +77,33 @@ INode *BuildTree(std::map < unsigned long int, int >&frequencies)
     return trees.top();
 }
 
-void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & outCodes)
+void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & outCodes, std::map<unsigned long int, unsigned char>& code_lens)
 {
     if (const LeafNode * lf = dynamic_cast < const LeafNode * >(node)) {
-        outCodes[lf->c] = prefix;
+        unsigned long int binary = 0;
+        if (prefix.size() > sizeof(binary)*8) {
+            cout << "Error: encoding too large" << endl;
+            exit(1);
+        }
+        for (int i = prefix.size()-1; i >= 0; --i)
+            binary |= prefix[prefix.size()-1-i] << i;
+        outCodes[lf->c] = binary;
+        code_lens[lf->c] = prefix.size();
     } else if (const InternalNode * in = dynamic_cast < const InternalNode * >(node)) {
         HuffCode leftPrefix = prefix;
         leftPrefix.push_back(false);
-        GenerateCodes(in->left, leftPrefix, outCodes);
+        GenerateCodes(in->left, leftPrefix, outCodes, code_lens);
 
         HuffCode rightPrefix = prefix;
         rightPrefix.push_back(true);
-        GenerateCodes(in->right, rightPrefix, outCodes);
+        GenerateCodes(in->right, rightPrefix, outCodes, code_lens);
     }
 }
 
 void encode(vector<unsigned long int>& counters) {
 
-    std::map < unsigned long int, int >frequencies;
+    std::map<unsigned long int, unsigned char> code_lens;
+    std::map<unsigned long int, int >frequencies;
     for (unsigned long int i = 0; i < counters.size(); ++i)
         ++frequencies[counters[i]];
 
@@ -107,11 +114,13 @@ void encode(vector<unsigned long int>& counters) {
     INode *root = BuildTree(frequencies);
 
     HuffCodeMap codes;
-    GenerateCodes(root, HuffCode(), codes);
+    GenerateCodes(root, HuffCode(), codes, code_lens);
     delete root;
 
-    if (frequencies.size() == 1) // If there's only one symbol, we still need one bit for it
-        codes[frequencies.begin()->first].push_back(false);
+    if (frequencies.size() == 1) { // If there's only one symbol, we still need one bit for it
+        codes[frequencies.begin()->first] = 0;
+        code_lens[frequencies.begin()->first] = 1;
+    }
 
     /**************************************************************************/
     // Save the dictionary + encoding information:
@@ -137,19 +146,24 @@ void encode(vector<unsigned long int>& counters) {
         unsigned long int key = it->first; // TODO change key to ind_t
 
         // First, the key's length
-        unsigned int key_len = floor(log2(key)) + 1; // TODO with bit arithmetic
-        zlib_write_bit(key_len, sizeof(char)*8);
+        unsigned char key_len = 0;
+        unsigned long int key_copy = key;
+        while (key_copy != 0) {
+            key_copy >>= 1;
+            key_len++;
+        }
+        if (key_len == 0) // A 0 still requires 1 bit
+            key_len = 1;
+        zlib_write_bit(key_len, 6);
 
         // Next, the key itself
         zlib_write_bit(key, key_len);
 
         // Now, the code's length
-        unsigned int code_len = it->second.size();
-        zlib_write_bit(code_len, sizeof(char)*8);
+        zlib_write_bit(code_lens[key], 6);
 
         // Finally, the code itself
-        for (int rbit = code_len-1; rbit >= 0; --rbit)
-            zlib_write_bit(it->second[code_len-1-rbit], 1);
+        zlib_write_bit(it->second, code_lens[key]);
     }
 
     // Number N of symbols to code
@@ -158,8 +172,7 @@ void encode(vector<unsigned long int>& counters) {
 
     // Now the N codes
     for (unsigned long int i = 0; i < counters.size(); ++i)
-        for (unsigned long int j = 0; j < codes[counters[i]].size(); ++j)
-            zlib_write_bit(codes[counters[i]][j], 1);
+        zlib_write_bit(codes[counters[i]], code_lens[counters[i]]);
 
     zlib_close_wbit();
 }

@@ -24,7 +24,7 @@ void start_timer(string message) {
 void stop_timer() {
     auto elapsed = std::chrono::high_resolution_clock::now() - times.top();
     times.pop();
-    cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << endl << flush;
+    cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()/1000. << "ms" << endl << flush;
 }
 
 void cumulative_size_products(vector<int>& s, char n) {
