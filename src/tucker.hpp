@@ -37,8 +37,6 @@ void hosvd(double *data, vector<int>& s, vector<MatrixXd>& Us, bool compress, bo
 {
     char n = s.size();
 
-    if (verbose) cout << endl;
-
     // First unfolding: special case (elements are already arranged as we want)
     if (verbose) cout << "\tUnfold (1)... " << flush;
     MatrixXd M = MatrixXd::Map(data, s[0], sprod[n]/s[0]);

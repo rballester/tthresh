@@ -22,9 +22,21 @@ void start_timer(string message) {
 }
 
 void stop_timer() {
+    if (times.size() < 1) {
+        cout << "Error: timer not set" << endl;
+        exit(1);
+    }
     auto elapsed = std::chrono::high_resolution_clock::now() - times.top();
     times.pop();
     cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()/1000. << "ms" << endl << flush;
+}
+
+ind_t min(ind_t a, ind_t b) {
+    return (a < b) ? a : b;
+}
+
+ind_t max(ind_t a, ind_t b) {
+    return (a > b) ? a : b;
 }
 
 void cumulative_size_products(vector<int>& s, char n) {

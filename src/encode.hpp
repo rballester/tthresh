@@ -100,12 +100,12 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector<unsigned long int>& counters) {
+void encode(vector<unsigned long int>& rle) {
 
     std::map<unsigned long int, unsigned char> code_lens;
     std::map<unsigned long int, int >frequencies;
-    for (unsigned long int i = 0; i < counters.size(); ++i)
-        ++frequencies[counters[i]];
+    for (unsigned long int i = 0; i < rle.size(); ++i)
+        ++frequencies[rle[i]];
 
     /*******************************/
     // Create the Huffman dictionary
@@ -152,8 +152,7 @@ void encode(vector<unsigned long int>& counters) {
             key_copy >>= 1;
             key_len++;
         }
-        if (key_len == 0) // A 0 still requires 1 bit
-            key_len = 1;
+        key_len = max(1, key_len); // A 0 still requires 1 bit
         zlib_write_bit(key_len, 6);
 
         // Next, the key itself
@@ -167,12 +166,12 @@ void encode(vector<unsigned long int>& counters) {
     }
 
     // Number N of symbols to code
-    unsigned long int n_symbols = counters.size();
+    unsigned long int n_symbols = rle.size();
     zlib_write_bit(n_symbols, sizeof(n_symbols)*8);
 
     // Now the N codes
-    for (unsigned long int i = 0; i < counters.size(); ++i)
-        zlib_write_bit(codes[counters[i]], code_lens[counters[i]]);
+    for (unsigned long int i = 0; i < rle.size(); ++i)
+        zlib_write_bit(codes[rle[i]], code_lens[rle[i]]);
 
     zlib_close_wbit();
 }

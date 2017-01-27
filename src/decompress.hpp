@@ -47,9 +47,6 @@ void decode_factor(MatrixXd & U, int n_columns) {
 
 void decompress(string compressed_file, string output_file, double *data, bool verbose, bool debug) {
 
-    if (verbose)
-        cout << endl << "/***** Decompression *****/" << endl << endl << flush;
-    
     // Read output tensor dimensionality, sizes and type
     open_zlib_read(compressed_file);
     char n;
@@ -60,12 +57,14 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     for (char i = 0; i < n; ++i)
         size *= s[i];
     cumulative_size_products(s, n);
-    if (debug) {
-        cout << "Decompressing a tensor of size " << s[0];
+
+    if (verbose) {
+        cout << endl << "/***** Decompression: " << to_string(n) << "D tensor of size " << s[0];
         for (char i = 1; i < n; ++i)
             cout << " x " << s[i];
-        cout << "..." << endl;
+        cout << " *****/" << endl << endl;
     }
+
     char io_type_code;
     zlib_read_stream(reinterpret_cast < unsigned char *>(&io_type_code), sizeof(io_type_code));
     char io_type_size;
@@ -84,6 +83,10 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     vector<char>chunk_ids(size, 0);
     char chunk_num = 1;
     ind_t assigned = 0;
+    vector<ind_t> jumps(size+1, 0);
+    jumps[0] = size+1;
+    if (verbose)
+        start_timer("Decoding chunks...\n");
     while(assigned < size) {
         double chunk_min;
         zlib_read_stream(reinterpret_cast < unsigned char *>(&chunk_min), sizeof(chunk_min));
@@ -92,28 +95,68 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         zlib_read_stream(reinterpret_cast < unsigned char *>(&chunk_max), sizeof(chunk_max));
         maximums.push_back(chunk_max);
 
-        vector<ind_t> counters;
-        decode(counters);
-
-        ind_t ind = 0;
-        bool current_bit = false;
-        for (unsigned int i = 0; i < counters.size() and ind < size; ++i) {
-            // RLE decoding: put as many bits as the decoded integer indicates. TODO: sum directly
-            for (ind_t counter = 0; counter < counters[i]; ++counter) {
-                while (ind < size and chunk_ids[ind] > 0) // Skip core elements already assigned to a previous chunk
-                    ind++;
-                if (current_bit) {
-                    chunk_ids[ind] = chunk_num;
-                    ++assigned;
+        // At each step, we integrate a new mask. Each mask indexes only over the "zeros" of the previous mask
+        // The new mask always comes in RLE form
+        // The current mask is described by the "jumps" array: jumps[0] is the first RLE counter.
+        // If jumps[i] = n is an RLE counter, then jumps[i+n] coontains the next counter. The values in between can be safely ignored
+        vector<ind_t> rle;
+        decode(rle);
+        ind_t cur_pos = 0;
+        bool jump_bit = false;
+        bool cur_bit = false;
+        ind_t jump_ahead = jumps[cur_pos]; // How many bits are remaining from the "jumps" RLE
+        ind_t last_zero_start = 0;
+        ind_t last_one_start = -1;
+        rle[0]++; // We assume the mask always starts with a "ghost" 0, to simplify corner cases when the first counter is 0
+        for (unsigned long int i = 0; i < rle.size(); ++i) {
+            ind_t counter = rle[i];
+            while (counter > 0) {
+                if (jump_bit == false) {
+                    if (cur_bit == false) { // This is the only case in which
+                        if (last_one_start > -1)
+                            jumps[last_one_start] = cur_pos-last_one_start;
+                        last_zero_start = cur_pos;
+                        ind_t step = min(counter, jump_ahead);
+                        counter -= step;
+                        jumps[cur_pos] = step;
+                        cur_pos += step;
+                        jump_ahead -= step;
+                        if (cur_pos < size+1)
+                            last_one_start = cur_pos;
+                    }
+                    else {
+                        ind_t step = min(counter, jump_ahead);
+                        for (ind_t pos = cur_pos; pos < cur_pos+step; ++pos)
+                            chunk_ids[pos-1] = chunk_num;
+                        assigned += step;
+                        counter -= step;
+                        cur_pos += step;
+                        jump_ahead -= step;
+                    }
                 }
-                ind++;
+                else {
+                    cur_pos += jump_ahead;
+                    jump_ahead = 0;
+                }
+                if (jump_ahead == 0 and cur_pos < size+1) {
+                    jump_bit = not jump_bit;
+                    jump_ahead = jumps[cur_pos];
+                }
             }
-            current_bit = !current_bit;
+            if (cur_pos < size+1) // Not yet at the end of the mask
+                cur_bit = not cur_bit;
         }
+        if (cur_bit == false and jump_bit == false) // We finished with a sequence of 0's
+            jumps[last_zero_start] = size+1-last_zero_start;
+        else // We finished with a sequence of 1's
+            jumps[last_one_start] = size+1-last_one_start;
+
         if (verbose)
-            cout << "Decoded chunk " << int(chunk_num) << " (q=" << int (chunk_num - 1) << "), minimum=" << minimums[minimums.size()-1] << ", maximum=" << maximums[maximums.size()-1] << endl << flush;
+            cout << "\tDecoded chunk " << int(chunk_num) << " (q=" << int (chunk_num - 1) << "), min=" << minimums[minimums.size()-1] << ", max=" << maximums[maximums.size()-1] << endl << flush;
         ++chunk_num;
     }
+    if (verbose)
+        stop_timer();
 
     // Read factor matrices
     if (verbose)
@@ -152,7 +195,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
         stop_timer();
 
     if (verbose)
-        start_timer("Reconstructing tensor... ");
+        start_timer("Reconstructing tensor...\n");
     hosvd(c, s, Us, false, verbose);
     if (verbose)
         stop_timer();

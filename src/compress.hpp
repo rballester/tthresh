@@ -62,14 +62,18 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
 
 double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose=false, bool debug=false) {
 
-    if (verbose)
-        cout << endl << "/***** Compression *****/" << endl << endl << flush;
+    unsigned char n = s.size();
+    if (verbose) {
+        cout << endl << "/***** Compression: " << to_string(n) << "D tensor of size " << s[0];
+        for (char i = 1; i < n; ++i)
+            cout << " x " << s[i];
+        cout << " *****/" << endl << endl;
+    }
 
     /**************************/
     // Check input data type
     /**************************/
 
-    unsigned char n = s.size();
     ind_t size = 1; // Total number of tensor elements
     for (char i = 0; i < n; ++i)
         size *= s[i];
@@ -205,7 +209,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /*********************************/
 
     if (verbose)
-        start_timer("Decomposing the " + to_string(n) + "D tensor... ");
+        start_timer("Tucker decomposition...");
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
     vector<MatrixXd> Us(n); // Tucker factor matrices
@@ -230,6 +234,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Generate adaptive chunks from the sorted curve
     /************************************************/
 
+    if (verbose)
+        start_timer("Encoding chunks...\n");
     ind_t adder = 1;
     char q = 0;
     ind_t left = 0;
@@ -265,7 +271,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             }
             double mse = sse / (right - left);
             if (debug)
-                cout << "We try [" << left << "," << right << "), adder = " << adder << ", mse = " << mse << endl;
+                cout << "\t\tWe try [" << left << "," << right << "), adder = " << adder << ", mse = " << mse << endl;
             if (mse >= 0.9 * lim or right == size) {
                 if (mse >= lim) {
                     if (adder > 1) {
@@ -313,6 +319,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         /********************************************/
         // Save mask and compute RLE+Huffman out of it
         /********************************************/
+
         #pragma omp parallel for
         for (int i = left; i < right; ++i) {
             unsigned long int index = sorting[i].second;
@@ -356,7 +363,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             ind_t quant_bits = 0;
             if (q > 0)
                 quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-            cout << "Encoded chunk " << int(chunk_num) << ", min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", q=" << int (q) << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+            cout << "\tEncoded chunk " << int(chunk_num) << " (q=" << int(q) << "), min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
 
         // Update control variables
@@ -365,6 +372,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         old_right = left;
         chunk_num++;
     }
+    if (verbose)
+        stop_timer();
 
     /*********************************/
     // Encode and save factor matrices

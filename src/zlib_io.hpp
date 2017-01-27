@@ -21,10 +21,6 @@
 #define CHUNK (1<<18)
 #define BITS int(sizeof(unsigned long int)*8) // Number of buffer bits for bitwise I/O
 
-ind_t min(ind_t a, ind_t b) {
-    return (a < b) ? a : b;
-}
-
 struct {
     unsigned long int rbytes, wbytes;
     char rbit, wbit;

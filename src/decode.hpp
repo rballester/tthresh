@@ -6,7 +6,7 @@
 
 using namespace std;
 
-void decode(vector<ind_t>& counters) {
+void decode(vector<ind_t>& rle) {
 
     zlib_open_rbit();
 
@@ -55,7 +55,7 @@ void decode(vector<ind_t>& counters) {
             }
             it = tm[code_len].find(code); // See if this corresponds to a symbol
         }
-        counters.push_back(it->second);
+        rle.push_back(it->second);
         code = 0;
         code_len = 0;
     }
