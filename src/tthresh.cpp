@@ -18,8 +18,8 @@ int main(int argc, char *argv[])
     Mode mode = none_mode;
     Target target = eps;
     double target_value = -1;
-    unsigned long int skip_bytes = 0; // Used to skip headers of a specified size
-    vector<int> s; // Tensor sizes
+    size_t skip_bytes = 0; // Used to skip headers of a specified size
+    vector<uint32_t> s; // Tensor sizes
     bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
                 if (arg[arg.size()-1] == '^' or n_parts > 2 or not is_number(token) or base <= 0 or exponent <= 0)
                     display_error("Unrecognized sizes: must be positive integers");
             }
-            for (int dim = 0; dim < exponent; ++dim)
+            for (uint8_t dim = 0; dim < exponent; ++dim)
                 s.push_back(base);
         } else if (mode == target_mode) {
             if (not is_number(arg))
@@ -195,12 +195,10 @@ int main(int argc, char *argv[])
     /***************************/
 
     double *data = NULL;
-    if (input_flag) {
+    if (input_flag)
         data = compress(input_file, compressed_file, io_type, s, target, target_value, skip_bytes, verbose_flag, debug_flag);
-    }
-    if (output_flag) {
+    if (output_flag)
         decompress(compressed_file, output_file, data, verbose_flag, debug_flag);
-    }
     delete[](data-skip_bytes);
 
     return 0;

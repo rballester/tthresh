@@ -14,42 +14,41 @@ using namespace std;
 using namespace Eigen;
 
 // *** Variable types ***
-// Number of dimensions: char
-// Chunk counting: char
-// Size of each dimension: unsigned int
+// Number of dimensions: uint8_t
+// Chunk counting: uint8_t
+// Size of each dimension: uint32_t
 // Total size: size_t
 
 // *** Structure of the compressed file ***
 // (1) 1 byte: number of dimensions n
 // (2) n * 4 bytes: tensor sizes
 // (3) 1 byte: tensor type
-// (4) 1 byte: number of chunks
-// (5) Per-chunk information and masks: n_chunks * (chunk_info + compressed mask)
-// (6) Factor matrices
-// (7) The quantized core
+// (4) Per-chunk information and masks: n_chunks * (minimum + maximum + compressed mask)
+// (5) Factor matrices
+// (6) The quantized core
 
-void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns_q) {
+void encode_factor(MatrixXd & U, uint32_t n_columns, vector < uint8_t >&columns_q) {
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
-    zlib_write_stream(reinterpret_cast< unsigned char *> (&maximum), sizeof(maximum));
+    zlib_write_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
-    for (unsigned int i = 0; i < n_columns; ++i)
-        zlib_write_stream(reinterpret_cast< unsigned char *> (&columns_q[i]), sizeof(columns_q[i]));
+    for (uint32_t i = 0; i < n_columns; ++i)
+        zlib_write_stream(reinterpret_cast<uint8_t*> (&columns_q[i]), sizeof(columns_q[i]));
 
     // Finally the matrix itself, quantized
     zlib_open_wbit();
-    for (unsigned int j = 0; j < n_columns; ++j) {
-        for (unsigned int i = 0; i < n_columns; ++i) {
-            char q = columns_q[j];
+    for (uint32_t j = 0; j < n_columns; ++j) {
+        for (uint32_t i = 0; i < n_columns; ++i) {
+            uint8_t q = columns_q[j];
             if (q > 0) {
                 q = min(63, q + 2);	// Seems a good compromise
-                unsigned long int to_write;
+                uint64_t to_write;
                 if (q == 63)
-                    to_write = *reinterpret_cast<unsigned long int*>(&U(i,j));
+                    to_write = *reinterpret_cast<uint64_t*>(&U(i,j));
                 else {
-                    to_write = min(((1UL << q) - 1), (unsigned long int) roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
+                    to_write = min(((1UL << q) - 1), (uint64_t) roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
                     if (U(i, j) < 0)
                         to_write |=  1UL << q;// The sign is the most significant bit
                 }
@@ -60,12 +59,12 @@ void encode_factor(MatrixXd & U, unsigned int n_columns, vector < char >&columns
     zlib_close_wbit();
 }
 
-double *compress(string input_file, string compressed_file, string io_type, vector < int >&s, Target target, double target_value, unsigned long int skip_bytes, bool verbose=false, bool debug=false) {
+double *compress(string input_file, string compressed_file, string io_type, vector < uint32_t >&s, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
 
-    unsigned char n = s.size();
+    uint8_t n = s.size();
     if (verbose) {
         cout << endl << "/***** Compression: " << to_string(n) << "D tensor of size " << s[0];
-        for (char i = 1; i < n; ++i)
+        for (uint8_t i = 1; i < n; ++i)
             cout << " x " << s[i];
         cout << " *****/" << endl << endl;
     }
@@ -74,10 +73,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Check input data type
     /**************************/
 
-    ind_t size = 1; // Total number of tensor elements
-    for (char i = 0; i < n; ++i)
+    size_t size = 1; // Total number of tensor elements
+    for (uint8_t i = 0; i < n; ++i)
         size *= s[i];
-    char io_type_size, io_type_code;
+    uint8_t io_type_size, io_type_code;
     if (io_type == "uchar") {
         io_type_size = sizeof(unsigned char);
         io_type_code = 0;
@@ -103,21 +102,21 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Check input file sizes
     /************************/
 
-    ind_t expected_size = skip_bytes + size * io_type_size;
+    size_t expected_size = skip_bytes + size * io_type_size;
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
         cout << "Could not open \"" << input_file << "\"" << endl;
         exit(1);
     }
-    streampos fsize = input_stream.tellg();	// Check that buffer size matches expected size
+    size_t fsize = input_stream.tellg(); // Check that buffer size matches expected size
     input_stream.seekg(0, ios::end);
-    fsize = input_stream.tellg() - fsize;
+    fsize = size_t(input_stream.tellg()) - fsize;
     if (expected_size != fsize) {
         cout << "Invalid file size: expected ";
         if (skip_bytes > 0)
             cout << skip_bytes << " + ";
         cout << "(" << s[0];
-        for (char i = 1; i < n; ++i)
+        for (uint8_t i = 1; i < n; ++i)
             cout << "*" << s[i];
         cout << ")*" << int(io_type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
         if (expected_size > fsize) {
@@ -159,7 +158,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         data = (double *) in + skip_bytes;
     else
         data = new double[size];
-    for (ind_t i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         switch (io_type_code) {
             case 0:
                 data[i] = *reinterpret_cast< unsigned char* >(&in[skip_bytes + i * io_type_size]);
@@ -223,9 +222,9 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         start_timer("Sorting core's absolute values... ");
-    vector< pair<double,ind_t>> sorting(size);
-    for (ind_t i = 0; i < size; ++i)
-        sorting[i] = pair < double, ind_t >(abs(c[i]), i);
+    vector< pair<double,size_t> > sorting(size);
+    for (size_t i = 0; i < size; ++i)
+        sorting[i] = pair < double, size_t >(abs(c[i]), i);
     sort(sorting.begin(), sorting.end());
     if (verbose)
         stop_timer();
@@ -236,16 +235,16 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         start_timer("Encoding chunks...\n");
-    ind_t adder = 1;
-    char q = 0;
-    ind_t left = 0;
-    ind_t old_right = left;	// Inclusive bound
-    ind_t right = left;	// Exclusive bound
-    vector<char> chunk_ids(size, 0);
-    char chunk_num = 1;
-    vector< vector<char> > Us_q(n);
-    for (char i = 0; i < n; ++i)
-        Us_q[i] = vector<char> (s[i], 0);
+    size_t adder = 1;
+    uint8_t q = 0;
+    size_t left = 0;
+    size_t old_right = left;	// Inclusive bound
+    size_t right = left;	// Exclusive bound
+    vector<uint8_t> chunk_ids(size, 0);
+    uint8_t chunk_num = 1;
+    vector< vector<uint8_t> > Us_q(n);
+    for (uint8_t i = 0; i < n; ++i)
+        Us_q[i] = vector<uint8_t> (s[i], 0);
 
     while (left < size) {
         while (left < size and q < 63) {
@@ -259,13 +258,13 @@ double *compress(string input_file, string compressed_file, string io_type, vect
                     // double k = (chunk_max - chunk_min)/double(1<<q); // Quantization resolution
                     // mse = k*k/12; // Expected L2 error: $(\int_{-k/2}^{k/2} x^2 dx)/k$
                     // But that tends to underestimate the error
-                    for (ind_t i = left; i < right; ++i) {
-                        unsigned long int quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
+                    for (size_t i = left; i < right; ++i) {
+                        uint64_t quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
                         double dequant = quant * (chunk_max - chunk_min) / ((1UL << q) - 1.) + chunk_min;
                         sse += (sorting[i].first - dequant) * (sorting[i].first - dequant);
                     }
                 } else {
-                    for (ind_t i = left; i < right; ++i)
+                    for (size_t i = left; i < right; ++i)
                         sse += (sorting[i].first - chunk_min) * (sorting[i].first - chunk_min);
                 }
             }
@@ -292,7 +291,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         if (q == 63)
             right = size;
 
-        ind_t chunk_size = (right - left);
+        size_t chunk_size = (right - left);
         double chunk_min = sorting[left].first;
         double chunk_max = sorting[right - 1].first;
 
@@ -304,11 +303,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         // If q = 63, values are kept as they are (doubles) and we forget about quantization
         if (q > 0 and q < 63) {
             #pragma omp parallel for
-            for (int i = left; i < right; ++i) {
-                unsigned long int to_write = 0;
+            for (size_t i = left; i < right; ++i) {
+                size_t to_write = 0;
                 if (chunk_size > 1)
                     // The following min() prevents overflowing the q-bit representation when converting double -> long int
-                    to_write = min(((1UL << q) - 1), (unsigned long int)
+                    to_write = min(((1UL << q) - 1), (uint64_t)
                                    roundl((sorting[i].first - chunk_min) / (chunk_max - chunk_min) * ((1UL << q) - 1)));
                 if (c[sorting[i].second] < 0)
                     to_write |= 1UL << q;
@@ -321,24 +320,24 @@ double *compress(string input_file, string compressed_file, string io_type, vect
         /********************************************/
 
         #pragma omp parallel for
-        for (int i = left; i < right; ++i) {
-            unsigned long int index = sorting[i].second;
+        for (size_t i = left; i < right; ++i) {
+            size_t index = sorting[i].second;
             chunk_ids[index] = chunk_num;
 
             // We use this loop also to update the needed quantization bits per factor column
-            for (char dim = 0; dim < n; ++dim) {
-                int coord = index % sprod[dim+1] / sprod[dim];
-                Us_q[dim][coord] = max(Us_q[dim][coord], q);
+            for (uint8_t i = 0; i < n; ++i) {
+                size_t coord = index % sprod[i+1] / sprod[i];
+                Us_q[i][coord] = max(Us_q[i][coord], q);
             }
         }
 
-        vector<unsigned long int> counters;
+        vector<size_t> rle;
 
         // RLE
         bool current_bit = false;
         bool last_bit = false;
-        unsigned long int counter = 0;
-        for (int i = 0; i < size; ++i) {
+        size_t counter = 0;
+        for (size_t i = 0; i < size; ++i) {
             if (chunk_ids[i] == 0)
                 current_bit = false;
             else if (chunk_ids[i] == chunk_num)
@@ -348,19 +347,19 @@ double *compress(string input_file, string compressed_file, string io_type, vect
             if (current_bit == last_bit)
                 counter++;
             else {
-                counters.push_back(counter);
+                rle.push_back(counter);
                 counter = 1;
                 last_bit = current_bit;
             }
         }
-        counters.push_back(counter);
+        rle.push_back(counter);
 
         zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_min), sizeof(chunk_min));
         zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_max), sizeof(chunk_max));
-        encode(counters);
+        encode(rle);
 
         if (verbose) {
-            ind_t quant_bits = 0;
+            size_t quant_bits = 0;
             if (q > 0)
                 quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
             cout << "\tEncoded chunk " << int(chunk_num) << " (q=" << int(q) << "), min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
@@ -381,8 +380,8 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (debug) {
         cout << "q's for the factor columns: " << endl;
-        for (char i = 0; i < n; ++i) {
-            for (int j = 0; j < s[i]; ++j)
+        for (uint8_t i = 0; i < n; ++i) {
+            for (uint32_t j = 0; j < s[i]; ++j)
                 cout << " " << int(Us_q[i][j]);
             cout << endl;
         }
@@ -390,7 +389,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
 
     if (verbose)
         start_timer("Encoding factor matrices... ");
-    for (char i = 0; i < n; ++i)
+    for (uint8_t i = 0; i < n; ++i)
         encode_factor(Us[i], s[i], Us_q[i]);
     if (verbose)
         stop_timer();
@@ -402,10 +401,10 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     if (verbose)
         start_timer("Saving core quantization... ");
     zlib_open_wbit();
-    for (ind_t i = 0; i < size; ++i) {
-        char q = chunk_ids[i] - 1;
+    for (size_t i = 0; i < size; ++i) {
+        uint8_t q = chunk_ids[i] - 1;
         if (q > 0)
-            zlib_write_bit(*reinterpret_cast < unsigned long int* >(&c[i]), q+1);
+            zlib_write_bit(*reinterpret_cast<uint64_t*> (&c[i]), q+1);
     }
     zlib_close_wbit();
     if (verbose)
@@ -417,7 +416,7 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     // Compute and display statistics of the resulting compression rate
     /******************************************************************/
 
-    ind_t newbits = zs.total_written_bytes * 8;
+    size_t newbits = zs.total_written_bytes * 8;
     cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * io_type_size * 8L / double (newbits)
          << ", bpv = " << newbits / double (size) << endl << flush;
     return data;

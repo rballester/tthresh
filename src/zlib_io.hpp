@@ -19,32 +19,31 @@
 #endif
 
 #define CHUNK (1<<18)
-#define BITS int(sizeof(unsigned long int)*8) // Number of buffer bits for bitwise I/O
 
 struct {
-    unsigned long int rbytes, wbytes;
+    uint64_t rbytes, wbytes;
     char rbit, wbit;
     FILE *file; // File handle to read/write from/to
-    unsigned char inout[CHUNK]; // Buffer to write the results of inflation/deflation
-    unsigned char buf[CHUNK]; // Buffer used for the read/write operations
-    int bufstart = 0;
-    int bufend = 0;
-    ind_t total_written_bytes = 0; // Used to compute the final file size
+    uint8_t inout[CHUNK]; // Buffer to write the results of inflation/deflation
+    uint8_t buf[CHUNK]; // Buffer used for the read/write operations
+    int32_t bufstart = 0;
+    int32_t bufend = 0;
+    size_t total_written_bytes = 0; // Used to compute the final file size
     z_stream strm;
 } zs; // Read/write state for zlib interfacing
 
-int deflate_chunk(ind_t bytes_to_write, int flush)
+int32_t deflate_chunk(size_t bytes_to_write, int32_t flush)
 {
     zs.strm.avail_in = bytes_to_write;
     zs.strm.next_in = zs.buf;
-    int ret;
+    int32_t ret;
     do {
         zs.strm.avail_out = CHUNK;
         zs.strm.next_out = zs.inout;
         ret = deflate(&(zs.strm), flush);    /* no bad return value */
         if (ret == Z_STREAM_ERROR)  /* state not clobbered */
             throw ret;
-        unsigned have = CHUNK - zs.strm.avail_out;
+        uint32_t have = CHUNK - zs.strm.avail_out;
         zs.total_written_bytes += have;
         if (fwrite(zs.inout, 1, have, zs.file) != have || ferror(zs.file)) {
             (void)deflateEnd(&(zs.strm));
@@ -63,16 +62,15 @@ void open_zlib_write(string output_file)
     zs.strm.zalloc = Z_NULL;
     zs.strm.zfree = Z_NULL;
     zs.strm.opaque = Z_NULL;
-    int ret = deflateInit(&(zs.strm), Z_DEFAULT_COMPRESSION);
+    int32_t ret = deflateInit(&(zs.strm), Z_DEFAULT_COMPRESSION);
     if (ret != Z_OK)
         throw ret;
 }
 
-void zlib_write_stream(unsigned char *buf, ind_t bytes_to_write)
+void zlib_write_stream(unsigned char *buf, size_t bytes_to_write)
 {
-    assert(zs.wbit == BITS-1); // One shouldn't want to write a stream in the middle of individual bits
     while (bytes_to_write > 0) {
-        long int to_copy = min(bytes_to_write, CHUNK-zs.bufend);
+        size_t to_copy = min(bytes_to_write, CHUNK-zs.bufend);
         memcpy(zs.buf + zs.bufend, buf, to_copy);
         zs.bufend += to_copy;
         buf += to_copy;
@@ -85,7 +83,7 @@ void zlib_write_stream(unsigned char *buf, ind_t bytes_to_write)
 }
 
 void close_zlib_write() {
-    int ret = deflate_chunk(zs.bufend, Z_FINISH);
+    int32_t ret = deflate_chunk(zs.bufend, Z_FINISH);
     if (ret != Z_STREAM_END) /* stream will be complete */
         throw ret;
     /* clean up and return */
@@ -95,10 +93,10 @@ void close_zlib_write() {
 
 void zlib_open_wbit() {
     zs.wbytes = 0;
-    zs.wbit = BITS-1;
+    zs.wbit = 63;
 }
 
-// Assumption: to_write <= BITS
+// Assumption: to_write <= 64
 void zlib_write_bit(unsigned long int bits, char to_write) {
     if (to_write <= zs.wbit+1) {
         zs.wbytes |= bits << (zs.wbit+1-to_write);
@@ -110,14 +108,14 @@ void zlib_write_bit(unsigned long int bits, char to_write) {
         zlib_write_stream(reinterpret_cast<unsigned char *> (&zs.wbytes), sizeof(zs.wbytes));
         to_write -= zs.wbit+1;
         zs.wbytes = 0;
-        zs.wbytes |= bits << (BITS-to_write);
-        zs.wbit = BITS-1-to_write;
+        zs.wbytes |= bits << (64-to_write);
+        zs.wbit = 63-to_write;
     }
 }
 
 void zlib_close_wbit() {
     // Write any reamining bits
-    if (zs.wbit < BITS-1)
+    if (zs.wbit < 63)
         zlib_write_stream(reinterpret_cast < unsigned char *> (&zs.wbytes), sizeof(zs.wbytes));
 }
 
@@ -141,7 +139,7 @@ void inflate_chunk()
 
         zs.strm.avail_out = CHUNK;
         zs.strm.next_out = zs.buf;
-        int ret = inflate(&zs.strm, Z_NO_FLUSH);
+        int32_t ret = inflate(&zs.strm, Z_NO_FLUSH);
         if (ret == Z_NEED_DICT)
             ret = Z_DATA_ERROR;
         if (ret == Z_MEM_ERROR) {
@@ -170,12 +168,12 @@ void open_zlib_read(string input_file)
         throw ret;
 }
 
-void zlib_read_stream(unsigned char *buf, unsigned long int bytes_to_read)
+void zlib_read_stream(uint8_t *buf, size_t bytes_to_read)
 {
     while (bytes_to_read > 0) {
         if (zs.bufstart == zs.bufend) // The buffer is empty
             inflate_chunk(); // Fill the buffer
-        unsigned long int to_copy = min(bytes_to_read, zs.bufend-zs.bufstart);
+        size_t to_copy = min(bytes_to_read, zs.bufend-zs.bufstart);
         memcpy(buf, zs.buf + zs.bufstart, to_copy);
         zs.bufstart += to_copy;
         buf += to_copy;
@@ -196,19 +194,19 @@ void zlib_open_rbit() {
 }
 
 // Assumption: to_read <= BITS
-unsigned long int zlib_read_bits(char to_read) {
-    unsigned long int result = 0;
+uint64_t zlib_read_bits(char to_read) {
+    uint64_t result = 0;
     if (to_read <= zs.rbit+1) {
-        result = zs.rbytes << (BITS-1-zs.rbit) >> (BITS-to_read);
+        result = zs.rbytes << (63-zs.rbit) >> (64-to_read);
         zs.rbit -= to_read;
     }
     else {
         if (zs.rbit > -1)
-            result = zs.rbytes << (BITS-zs.rbit-1) >> (BITS-to_read);
-        zlib_read_stream(reinterpret_cast<unsigned char *> (&zs.rbytes), sizeof(zs.rbytes));
+            result = zs.rbytes << (64-zs.rbit-1) >> (64-to_read);
+        zlib_read_stream(reinterpret_cast<uint8_t *> (&zs.rbytes), sizeof(zs.rbytes));
         to_read -= zs.rbit+1;
-        result |= zs.rbytes >> (BITS-to_read);
-        zs.rbit = BITS-1-to_read;
+        result |= zs.rbytes >> (64-to_read);
+        zs.rbit = 63-to_read;
     }
     return result;
 }

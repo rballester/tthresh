@@ -11,9 +11,7 @@ using namespace std::chrono;
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
 
-typedef long int ind_t; // Used to index bytes and bits
-
-vector<ind_t> sprod;
+vector<size_t> sprod;
 
 stack<high_resolution_clock::time_point> times;
 void start_timer(string message) {
@@ -31,19 +29,19 @@ void stop_timer() {
     cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()/1000. << "ms" << endl << flush;
 }
 
-ind_t min(ind_t a, ind_t b) {
+int64_t min(int64_t a, int64_t b) {
     return (a < b) ? a : b;
 }
 
-ind_t max(ind_t a, ind_t b) {
+int64_t max(int64_t a, int64_t b) {
     return (a > b) ? a : b;
 }
 
-void cumulative_size_products(vector<int>& s, char n) {
+void cumulative_size_products(vector<uint32_t>& s, uint8_t n) {
     // Compute the cumulative products (useful later on for index computations)
-    sprod = vector<ind_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
     sprod[0] = 1;
-    for (char dim = 0; dim < n; ++dim)
+    for (uint8_t dim = 0; dim < n; ++dim)
         sprod[dim+1] = sprod[dim]*s[dim];
 }
 

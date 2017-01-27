@@ -16,17 +16,17 @@
 
 using namespace std;
 
-typedef std::vector < bool > HuffCode;
-typedef std::map < unsigned long int, unsigned long int > HuffCodeMap;
+typedef std::vector<bool> HuffCode;
+typedef std::map<size_t, uint64_t> HuffCodeMap;
 
 class INode {
 public:
-    const unsigned long int
+    const size_t
     f;
 
     virtual ~ INode() {
     } protected:
-    INode(unsigned long int f):f(f) {
+    INode(size_t f):f(f) {
     }
 };
 
@@ -46,10 +46,10 @@ public:
 
 class LeafNode:public INode {
 public:
-    const unsigned long int
+    const size_t
     c;
 
-    LeafNode(unsigned long int f, unsigned long int c):INode(f), c(c) {
+    LeafNode(size_t f, size_t c):INode(f), c(c) {
     }};
 
 struct NodeCmp {
@@ -57,12 +57,12 @@ struct NodeCmp {
         return lhs->f > rhs->f;
     }};
 
-INode *BuildTree(std::map < unsigned long int, int >&frequencies)
+INode *BuildTree(std::map < size_t, uint32_t >&frequencies)
 {
     std::priority_queue < INode *, std::vector < INode * >, NodeCmp > trees;
 
-    for (std::map < unsigned long int, int >::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
-        trees.push(new LeafNode(it->second, (int) it->first));
+    for (std::map<size_t, uint32_t>::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
+        trees.push(new LeafNode(it->second, (uint32_t) it->first));
     }
     while (trees.size() > 1) {
         INode *childR = trees.top();
@@ -77,10 +77,10 @@ INode *BuildTree(std::map < unsigned long int, int >&frequencies)
     return trees.top();
 }
 
-void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & outCodes, std::map<unsigned long int, unsigned char>& code_lens)
+void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & outCodes, std::map<size_t, uint8_t>& code_lens)
 {
     if (const LeafNode * lf = dynamic_cast < const LeafNode * >(node)) {
-        unsigned long int binary = 0;
+        uint64_t binary = 0;
         if (prefix.size() > sizeof(binary)*8) {
             cout << "Error: encoding too large" << endl;
             exit(1);
@@ -100,11 +100,11 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector<unsigned long int>& rle) {
+void encode(vector<size_t>& rle) {
 
-    std::map<unsigned long int, unsigned char> code_lens;
-    std::map<unsigned long int, int >frequencies;
-    for (unsigned long int i = 0; i < rle.size(); ++i)
+    std::map<size_t, uint8_t> code_lens;
+    std::map<size_t, uint32_t> frequencies;
+    for (size_t i = 0; i < rle.size(); ++i)
         ++frequencies[rle[i]];
 
     /*******************************/
@@ -124,35 +124,35 @@ void encode(vector<unsigned long int>& rle) {
 
     /**************************************************************************/
     // Save the dictionary + encoding information:
-    // (1) Number of key/code pairs (int)
+    // (1) Number of key/code pairs (uint32_t)
     // (2) For each key/code pair:
-    //         length(key) (char)
+    //         length(key) (uint8_t)
     //         key (sequence of bits)
-    //         length(code) (char)
+    //         length(code) (uint8_t)
     //         code (sequence of bits)
-    // (3) Number N of keys to code (ind_t)
+    // (3) Number N of keys to code (uint64_t)
     // (4) N codes (sequence of bits)
     /**************************************************************************/
 
     zlib_open_wbit();
 
     // Number of key/code pairs
-    unsigned int dict_size = codes.size();
+    uint32_t dict_size = codes.size();
     zlib_write_bit(dict_size, sizeof(int)*8);
 
     // Key/code pairs
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
 
-        unsigned long int key = it->first; // TODO change key to ind_t
+        uint64_t key = it->first; // TODO change key to ind_t
 
         // First, the key's length
-        unsigned char key_len = 0;
-        unsigned long int key_copy = key;
-        while (key_copy != 0) {
+        uint8_t key_len = 0;
+        uint64_t key_copy = key;
+        while (key_copy) {
             key_copy >>= 1;
             key_len++;
         }
-        key_len = max(1, key_len); // A 0 still requires 1 bit
+        key_len = max(1, key_len); // A 0 still requires 1 bit for us
         zlib_write_bit(key_len, 6);
 
         // Next, the key itself
@@ -166,11 +166,11 @@ void encode(vector<unsigned long int>& rle) {
     }
 
     // Number N of symbols to code
-    unsigned long int n_symbols = rle.size();
+    uint64_t n_symbols = rle.size();
     zlib_write_bit(n_symbols, sizeof(n_symbols)*8);
 
     // Now the N codes
-    for (unsigned long int i = 0; i < rle.size(); ++i)
+    for (size_t i = 0; i < rle.size(); ++i)
         zlib_write_bit(codes[rle[i]], code_lens[rle[i]]);
 
     zlib_close_wbit();
