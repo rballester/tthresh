@@ -417,7 +417,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     /******************************************************************/
 
     size_t newbits = zs.total_written_bytes * 8;
-    cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionrate = " << size * io_type_size * 8L / double (newbits)
+    cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionratio = " << size * io_type_size * 8L / double (newbits)
          << ", bpv = " << newbits / double (size) << endl << flush;
     return data;
 }
