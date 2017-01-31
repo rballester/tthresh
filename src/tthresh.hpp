@@ -8,10 +8,16 @@
 using namespace std;
 using namespace std::chrono;
 
+// Size (in bytes) for all I/O buffers
+#define CHUNK (1<<18)
+
+// Compression parameters
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
 
-vector<size_t> sprod;
+// Tensor sizes
+vector<uint32_t> s, snew;
+vector<size_t> sprod, snewprod;
 
 stack<high_resolution_clock::time_point> times;
 void start_timer(string message) {

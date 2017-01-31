@@ -59,7 +59,7 @@ void encode_factor(MatrixXd & U, uint32_t n_columns, vector < uint8_t >&columns_
     zlib_close_wbit();
 }
 
-double *compress(string input_file, string compressed_file, string io_type, vector < uint32_t >&s, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
+double *compress(string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
 
     uint8_t n = s.size();
     if (verbose) {
@@ -208,11 +208,11 @@ double *compress(string input_file, string compressed_file, string io_type, vect
     /*********************************/
 
     if (verbose)
-        start_timer("Tucker decomposition...");
+        start_timer("Tucker decomposition...\n");
     double *c = new double[size];	// Tucker core
     memcpy(c, data, size * sizeof(double));
     vector<MatrixXd> Us(n); // Tucker factor matrices
-    hosvd(c, s, Us, true, verbose);
+    hosvd_compress(c, Us, verbose);
     if (verbose)
         stop_timer();
 

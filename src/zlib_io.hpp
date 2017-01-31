@@ -18,11 +18,9 @@
 #  define SET_BINARY_MODE(file)
 #endif
 
-#define CHUNK (1<<18)
-
 struct {
     uint64_t rbytes, wbytes;
-    char rbit, wbit;
+    int8_t rbit, wbit;
     FILE *file; // File handle to read/write from/to
     uint8_t inout[CHUNK]; // Buffer to write the results of inflation/deflation
     uint8_t buf[CHUNK]; // Buffer used for the read/write operations

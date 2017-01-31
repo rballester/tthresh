@@ -5,6 +5,7 @@
 #include "tucker.hpp"
 #include "zlib_io.hpp"
 #include "decode.hpp"
+#include "Slice.hpp"
 #include <Eigen/Dense>
 
 using namespace std;
@@ -45,23 +46,47 @@ void decode_factor(MatrixXd & U, uint32_t n_columns) {
     }
 }
 
-void decompress(string compressed_file, string output_file, double *data, bool verbose, bool debug) {
+void decompress(string compressed_file, string output_file, double *data, vector<Slice>& cutout, bool verbose, bool debug) {
 
     // Read output tensor dimensionality, sizes and type
     open_zlib_read(compressed_file);
     uint8_t n;
     zlib_read_stream(reinterpret_cast<uint8_t*> (&n), sizeof(n));
-    vector<uint32_t> s(n);
+    s = vector<uint32_t> (n);
     zlib_read_stream(reinterpret_cast<uint8_t*> (&s[0]), n * sizeof(s[0]));
-    size_t size = 1;
-    for (uint8_t i = 0; i < n; ++i)
-        size *= s[i];
-    cumulative_size_products(s, n);
+
+    bool whole_reconstruction = cutout.size() == 0;
+    if (cutout.size() < n) // Non-specified slicings are assumed to be the standard (0,1,-1)
+        for (uint32_t j = cutout.size(); j < s.size(); ++j)
+            cutout.push_back(Slice(0, -1, 1));
+
+    snew = vector<uint32_t> (n);
+    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    sprod[0] = 1;
+    snewprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains snew[0]*...*snew[i-1]
+    snewprod[0] = 1;
+    for (uint8_t i = 0; i < n; ++i) {
+        sprod[i+1] = sprod[i]*s[i];
+        cutout[i].update(s[i]);
+        snew[i] = cutout[i].get_size();
+        snewprod[i+1] = snewprod[i]*snew[i];
+    }
+    size_t size = sprod[n];
 
     if (verbose) {
-        cout << endl << "/***** Decompression: " << to_string(n) << "D tensor of size " << s[0];
+        cout << endl << "/***** Decompression: " << to_string(n) << "D tensor of size ";
+        if (not whole_reconstruction) {
+            cout << snew[0];
+            for (uint8_t i = 1; i < n; ++i)
+                cout << " x " << snew[i];
+            cout << " (originally ";
+        }
+        cout << s[0];
         for (uint8_t i = 1; i < n; ++i)
             cout << " x " << s[i];
+        if (not whole_reconstruction)
+            cout << ")";
+
         cout << " *****/" << endl << endl;
     }
 
@@ -167,7 +192,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     // Recover the quantized core and dequantize it
     if (verbose)
         start_timer("Dequantizing core... ");
-    double *c = new double[size];
+    vector<double> c(size);
     zlib_open_rbit();
     for (size_t i = 0; i < size; ++i) {
         uint8_t q = chunk_ids[i] - 1;
@@ -193,7 +218,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
 
     if (verbose)
         start_timer("Reconstructing tensor...\n");
-    hosvd(c, s, Us, false, verbose);
+    hosvd_decompress(c, Us, verbose, cutout);
     if (verbose)
         stop_timer();
 
@@ -207,7 +232,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     double datanorm = 0;
     double datamin = std::numeric_limits < double >::max();
     double datamax = std::numeric_limits < double >::min();
-    for (size_t i = 0; i < size; ++i) {
+    for (size_t i = 0; i < snewprod[n]; ++i) {
         if (io_type_code == 0)
             reinterpret_cast < unsigned char *>(&buffer[0])[buffer_wpos] = max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]));
         else if (io_type_code == 1)
@@ -223,7 +248,7 @@ void decompress(string compressed_file, string output_file, double *data, bool v
             buffer_wpos = 0;
             output_stream.write(reinterpret_cast<const char*>(&buffer[0]), io_type_size * buf_elems);
         }
-        if (data != NULL) {
+        if (whole_reconstruction and data != NULL) {
             datanorm += data[i] * data[i];
             sse += (data[i] - c[i]) * (data[i] - c[i]);
             datamin = min(datamin, data[i]);
@@ -233,11 +258,10 @@ void decompress(string compressed_file, string output_file, double *data, bool v
     if (buffer_wpos > 0)
         output_stream.write(reinterpret_cast<const char*>(&buffer[0]), io_type_size * buffer_wpos);
     output_stream.close();
-    delete[] c;
     if (verbose)
         stop_timer();
 
-    if (data != NULL) {	// If the uncompressed input is available, we compute the error statistics
+    if (whole_reconstruction and data != NULL) {	// If the uncompressed input is available, we compute the error statistics
         datanorm = sqrt(datanorm);
         double eps = sqrt(sse) / datanorm;
         double rmse = sqrt(sse / size);

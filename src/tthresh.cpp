@@ -6,25 +6,27 @@
 #include "tthresh.hpp"
 #include "compress.hpp"
 #include "decompress.hpp"
+#include "Slice.hpp"
 
 using namespace std;
 
 int main(int argc, char *argv[])
 {
-    /************************************/
-    // Check and process all arguments...
-    /************************************/
+    /*********************************/
+    // Check and process all arguments
+    /*********************************/
 
     Mode mode = none_mode;
     Target target = eps;
     double target_value = -1;
     size_t skip_bytes = 0; // Used to skip headers of a specified size
-    vector<uint32_t> s; // Tensor sizes
     bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;
     string output_file;
     string io_type;
+    vector<string> output_flags;
+    vector<Slice> cutout;
 
     if (argc == 1) {
         print_usage();
@@ -36,11 +38,10 @@ int main(int argc, char *argv[])
         if (arg[0] == '-') {
             mode = none_mode;
         }
-
         if (mode == none_mode) {
             if (mode == sizes_mode and not is_number(arg))
                 mode = none_mode;
-            if (arg[0] != '-')
+            if (mode != output_mode and arg[0] != '-')
                 display_error("Unrecognized flag \"" + arg + "\"");
             if (arg.size() != 2)
                 display_error("Flags must have exactly 1 letter");
@@ -126,8 +127,7 @@ int main(int argc, char *argv[])
             compressed_file = arg;
             mode = none_mode;
         } else if (mode == output_mode) {
-            output_file = arg;
-            mode = none_mode;
+            output_flags.push_back(arg);
         } else if (mode == io_type_mode) {
             io_type = arg;
             mode = none_mode;
@@ -178,10 +178,13 @@ int main(int argc, char *argv[])
         display_error("Specify a file name for the compressed data set (-c)");
 
     if (output_flag) {
-        if (output_file == "")
+        if (output_flags.size() == 0)
             display_error("Specify a valid output file name");
-        if (!input_flag and(io_type_flag or sizes_flag or target_value > 1))
+        if (not input_flag and(io_type_flag or sizes_flag or target_value > 1))
             display_error("Decompression mode only accepts flags -c, -o, -v and -d");
+        for (uint32_t j = 0; j < output_flags.size()-1; ++j)
+            cutout.push_back(Slice(output_flags[j]));
+        output_file = output_flags[output_flags.size()-1];
     }
 
     if (!input_flag and ! output_flag)
@@ -196,10 +199,10 @@ int main(int argc, char *argv[])
 
     double *data = NULL;
     if (input_flag)
-        data = compress(input_file, compressed_file, io_type, s, target, target_value, skip_bytes, verbose_flag, debug_flag);
+        data = compress(input_file, compressed_file, io_type, target, target_value, skip_bytes, verbose_flag, debug_flag);
     if (output_flag)
-        decompress(compressed_file, output_file, data, verbose_flag, debug_flag);
-    delete[](data-skip_bytes);
+        decompress(compressed_file, output_file, data, cutout, verbose_flag, debug_flag);
+    delete[] (data-skip_bytes);
 
     return 0;
 }
