@@ -34,8 +34,7 @@ void encode_factor(MatrixXd & U, uint32_t n_columns, vector < uint8_t >&columns_
     zlib_write_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
-    for (uint32_t i = 0; i < n_columns; ++i)
-        zlib_write_stream(reinterpret_cast<uint8_t*> (&columns_q[i]), sizeof(columns_q[i]));
+    zlib_write_stream(reinterpret_cast<uint8_t*> (&columns_q[0]), n_columns*sizeof(uint8_t));
 
     // Finally the matrix itself, quantized
     zlib_open_wbit();

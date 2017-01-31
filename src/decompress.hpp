@@ -21,8 +21,7 @@ void decode_factor(MatrixXd & U, uint32_t n_columns) {
 
     // Next, the q for each column
     vector<uint8_t> U_q(n_columns);
-    for (uint32_t i = 0; i < n_columns; ++i)
-        zlib_read_stream(reinterpret_cast<uint8_t*> (&U_q[i]), sizeof(U_q[i]));
+    zlib_read_stream(reinterpret_cast<uint8_t*> (&U_q[0]), n_columns*sizeof(uint8_t));
 
     // Finally we can dequantize the matrix
     zlib_open_rbit();

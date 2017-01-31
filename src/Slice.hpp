@@ -58,7 +58,7 @@ Slice::Slice(string description) {
         points[1] = points[0]+1;
     if (points[2] < 0) {
         if (points[0] == INT32_MAX) points[0] = -1;
-        if (points[1] == INT32_MAX) points[1] = 0;
+        if (points[1] == INT32_MAX) points[1] = -1;
     }
     else if (points[2] > 0) {
         if (points[0] == INT32_MAX) points[0] = 0;
@@ -88,7 +88,7 @@ ostream& operator<<(ostream& os, const Slice& slice)
 void Slice::update(uint32_t size) {
     if (points[0] == -1)
         points[0] = size;
-    else if (points[1] == -1)
+    else if (points[2] > 0 and points[1] == -1)
         points[1] = size;
     max_upper = size;
 }

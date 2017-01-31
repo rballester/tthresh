@@ -57,24 +57,27 @@ void print_usage() {
     cout << "Usage: tthresh <options>" << endl;
     cout << endl;
 
-    cout << "\t-h                    - Print this usage information and exit" << endl;
-    cout << "\t-i <input file>       - Input dataset in raw format (string). Either -i or -o (or both) must be specified" << endl;
-    cout << "\t-c <compressed file>  - Name for the compressed result (string)" << endl;
-    cout << "\t-o <output file>      - If specified, the compressed file (-c) will be decompressed to this file name (string)" << endl;
-    cout << "\t-v                    - Verbose mode; prints main algorithm steps" << endl;
-    cout << "\t-d                    - Print debug information" << endl;
+    cout << "\t-h                        - Print this usage information and exit" << endl;
+    cout << "\t-i <input file>           - Input dataset in raw format (string). Either -i or -o (or both) must be specified" << endl;
+    cout << "\t-c <compressed file>      - Name for the compressed result (string)" << endl;
+    cout << "\t-o [cutout] <output file> - If given, the compressed file (-c) will be decompressed to this file name (string)" << endl;
+    cout << "\t                            \tIf [cutout] is given, only a subtensor will be reconstructed." << endl;
+    cout << "\t                            \tThis is specified as in NumPy's slicing notation: start:stop:step" << endl;
+    cout << "\t                            \tUse the separator ':' for decimation; '/' for box filter downsampling" << endl;
+    cout << "\t-v                        - Verbose mode; prints main algorithm steps" << endl;
+    cout << "\t-d                        - Print debug information" << endl;
     cout << endl;
 
     cout << "Compression parameters (needed with -i):" << endl;
     cout << endl;
-    cout << "\t-t <type>             - Input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
-    cout << "\t-s <x> <y> <z> [...]  - Data sizes (3 or more integers)" << endl;
-    cout << "\t-e | -r | -p <target> - Target accuracy (real); relative error, RMSE or PSNR, respectively" << endl;
+    cout << "\t-t <type>                 - Input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
+    cout << "\t-s <x> <y> <z> [...]      - Data sizes (3 or more integers)" << endl;
+    cout << "\t-e | -r | -p <target>     - Target accuracy (real); relative error, RMSE or PSNR, respectively" << endl;
     cout << endl;
 
     cout << "Optional compression parameters:" << endl;
     cout << endl;
-    cout << "\t-k <n>                - Skip n leading bytes, for e.g. removing a header (integer)" << endl;
+    cout << "\t-k <n>                    - Skip n leading bytes, for e.g. removing a header (integer)" << endl;
     cout << endl;
 
     cout << "Examples:" << endl;
@@ -83,6 +86,9 @@ void print_usage() {
     cout << "\ttthresh -i data -k 16 -t float -s 128 256 64 100 -p 40 -c data.tthresh       - Compress a 4D tensor (e.g. time-dependent volume), skipping the first 16 bytes (header)" << endl;
     cout << "\ttthresh -i data -t double -s 2^20 -p 40 -c data.tthresh                      - Compress a 1D signal with ~1M points by reshaping it into a 2^20 tensor" << endl;
     cout << "\ttthresh -c data.tthresh -d data.decompressed                                 - Decompress a dataset" << endl;
+    cout << "\ttthresh -c data.tthresh -d ::2 ::2 ::2 data.decompressed                     - Decompress only the even tensor indices (final size: x8 smaller)" << endl;
+    cout << "\ttthresh -c data.tthresh -d :: :: 1 data.decompressed                         - Decompress the first z-slice" << endl;
+    cout << "\ttthresh -c data.tthresh -d //4 ::-1 ::-1 data.decompressed                   - Downsample x4 along the x-axis, invert the data along the other two axes" << endl;
     cout << endl;
 }
 
