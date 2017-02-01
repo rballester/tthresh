@@ -100,7 +100,7 @@ void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & ou
     }
 }
 
-void encode(vector<size_t>& rle) {
+size_t encode(vector<size_t>& rle) {
 
     std::map<size_t, uint8_t> code_lens;
     std::map<size_t, uint32_t> frequencies;
@@ -141,6 +141,7 @@ void encode(vector<size_t>& rle) {
     zlib_write_bits(dict_size, sizeof(int)*8);
 
     // Key/code pairs
+    size_t hbits = 0;
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
 
         uint64_t key = it->first; // TODO change key to ind_t
@@ -163,6 +164,8 @@ void encode(vector<size_t>& rle) {
 
         // Finally, the code itself
         zlib_write_bits(it->second, code_lens[key]);
+
+        hbits += 6 + key_len + 6 + code_lens[key] + code_lens[key]*frequencies[key];
     }
 
     // Number N of symbols to code
@@ -174,6 +177,7 @@ void encode(vector<size_t>& rle) {
         zlib_write_bits(codes[rle[i]], code_lens[rle[i]]);
 
     zlib_close_wbit();
+    return hbits;
 }
 
 #endif // ENCODE_HPP

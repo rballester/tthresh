@@ -327,7 +327,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
             buffer_wpos = 0;
             output_stream.write(reinterpret_cast<const char*>(&buffer[0]), io_type_size * buf_elems);
         }
-        if (whole_reconstruction and not autocrop and data != NULL) {
+        if (whole_reconstruction and not autocrop and data != NULL) { // If needed, we compute the error statistics
             datanorm += data[i] * data[i];
             sse += (data[i] - c[i]) * (data[i] - c[i]);
             datamin = min(datamin, data[i]);
@@ -340,7 +340,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     if (verbose)
         stop_timer();
 
-    if (whole_reconstruction and not autocrop and data != NULL) {	// If the uncompressed input is available, we compute the error statistics
+    if (whole_reconstruction and not autocrop and data != NULL) {
         datanorm = sqrt(datanorm);
         double eps = sqrt(sse) / datanorm;
         double rmse = sqrt(sse / size);

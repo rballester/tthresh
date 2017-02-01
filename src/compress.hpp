@@ -32,7 +32,9 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
-    zlib_write_bits(*reinterpret_cast<uint64_t*> (&maximum), 64);
+    uint64_t tmp;
+    memcpy(&tmp, (void*)&maximum, sizeof(maximum));
+    zlib_write_bits(tmp, 64);
 
     // Then the matrix itself, quantized
     for (uint32_t j = 0; j < U.cols(); ++j) {
@@ -229,14 +231,14 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     size_t adder = 1;
     uint8_t q = 0;
     size_t left = 0;
-    size_t old_right = left;	// Inclusive bound
-    size_t right = left;	// Exclusive bound
+    size_t old_right = left; // Inclusive bound
+    size_t right = left; // Exclusive bound
     vector<uint8_t> chunk_ids(size, 0);
     uint8_t chunk_num = 1;
     vector< vector<uint8_t> > Us_q(n);
     for (uint8_t i = 0; i < n; ++i)
         Us_q[i] = vector<uint8_t> (s[i], 0);
-
+    size_t total_qbits = 0, total_hbits = 0;
     while (left < size) {
         while (left < size and q < 63) {
             right = min(size, old_right + adder);
@@ -245,7 +247,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
             double sse = 0;
             if (right > left + 1) {
                 if (q > 0) {
-                    // Compute the quantization error. It could also be approximated  as follows:
+                    // Compute the quantization error. It could also be approximated as follows:
                     // double k = (chunk_max - chunk_min)/double(1<<q); // Quantization resolution
                     // mse = k*k/12; // Expected L2 error: $(\int_{-k/2}^{k/2} x^2 dx)/k$
                     // But that tends to underestimate the error
@@ -345,15 +347,17 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         }
         rle.push_back(counter);
 
-        zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_min), sizeof(chunk_min));
-        zlib_write_stream(reinterpret_cast<unsigned char*> (&chunk_max), sizeof(chunk_max));
-        encode(rle);
+        zlib_write_stream(reinterpret_cast<uint8_t*> (&chunk_min), sizeof(chunk_min));
+        zlib_write_stream(reinterpret_cast<uint8_t*> (&chunk_max), sizeof(chunk_max));
+        size_t hbits = encode(rle);
+        total_hbits += hbits;
 
         if (verbose) {
-            size_t quant_bits = 0;
+            size_t qbits = 0;
             if (q > 0)
-                quant_bits = (q + 1) * (right - left);	// The "+1" is for the sign
-            cout << "\tEncoded chunk " << int(chunk_num) << " (q=" << int(q) << "), min=" << chunk_min << ", max=" << chunk_max << ", quant_bits=" << quant_bits << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
+                qbits = (q + 1) * (right - left);	// The "+1" is for the sign
+            total_qbits += qbits;
+            cout << "\tEncoded chunk " << int(chunk_num) << " (q=" << int(q) << "), min=" << chunk_min << ", max=" << chunk_max << ", qbits=" << qbits << ", hbits=" << hbits << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
         }
 
         // Update control variables
@@ -364,6 +368,8 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     }
     if (verbose)
         stop_timer();
+    if (debug)
+        cout << "Total qbits=" << total_qbits << ", total hbits=" << total_hbits << endl;
 
     /*******************************/
     // Compute and save tensor ranks

@@ -40,6 +40,7 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
             exit(1);
         }
         MatrixXd selection = MatrixXd::Zero(slice.get_size(), U.rows());
+        #pragma omp parallel for
         for (uint32_t i = 0; i < slice.get_size(); ++i) {
             if (not slice.downsample)
                 selection(i, slice.points[0]+i*slice.points[2]) = 1;
