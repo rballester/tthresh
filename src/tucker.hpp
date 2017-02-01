@@ -30,7 +30,7 @@ void project(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj)
 // U is an input parameter and M is decompressed using U (sliced as appropriate)
 void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
     if (not slice.is_standard()) {
-        if (slice.points[0] < 0 or slice.points[1] > M.rows()) { // TODO put in decompress.hpp
+        if (slice.points[0] < 0 or slice.points[1] > U.rows()) { // TODO put in decompress.hpp
             cout << "Error: the slicing falls out of the tensor size range" << endl;
             exit(1);
         }
@@ -39,13 +39,13 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
             cout << "Error: unfeasible slicing" << endl;
             exit(1);
         }
-        MatrixXd selection = MatrixXd::Zero(slice.get_size(), M.rows());
+        MatrixXd selection = MatrixXd::Zero(slice.get_size(), U.rows());
         for (uint32_t i = 0; i < slice.get_size(); ++i) {
             if (not slice.downsample)
                 selection(i, slice.points[0]+i*slice.points[2]) = 1;
             else {
                 int32_t start = slice.points[0]+i*slice.points[2];
-                int32_t end = max(min(slice.points[0]+(i+1)*slice.points[2], M.rows()), 0);
+                int32_t end = max(min(slice.points[0]+(i+1)*slice.points[2], U.rows()), 0);
                 double kernel = 1./(end-start);
                 for (int32_t j = start; sign*j < sign*end; j += sign)
                     selection(i, j) = kernel;
@@ -102,12 +102,17 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
 {
     uint8_t n = s.size();
 
+    if (rprod[n] == 0) { // Extreme case: 0 ranks
+        data = vector<double> (snewprod[n], 0); // Produce a 0 reconstruction of the expected size, and leave
+        return;
+    }
+
     // First unfolding: special case (elements are already arranged as we want)
     if (verbose) cout << "\tUnfold (1)... " << flush;
-    MatrixXd M = MatrixXd::Map(data.data(), s[0], sprod[n]/s[0]);
+    MatrixXd M = MatrixXd::Map(data.data(), r[0], rprod[n]/r[0]);
     MatrixXd M_proj;
     if (verbose) {
-        cout << "\tProject (" << 1 << ")";
+        cout << "\tUnproject (" << 1 << ")";
         if (not cutout[0].is_standard())
             cout << " with cutout " << cutout[0];
         cout << "... " << flush;
@@ -120,16 +125,16 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
     // Output: matrix of size s[dim] x (s[0] * ... * s[dim-1] * s[dim+1] * ... * s[N])
     for (uint8_t dim = 1; dim < n; ++dim) {
         if (verbose) cout << "\tUnfold (" << dim+1 << ")... " << flush;
-        M = MatrixXd(s[dim], snewprod[dim]*sprod[n]/sprod[dim+1]); // dim-th factor matrix
+        M = MatrixXd(r[dim], snewprod[dim]*rprod[n]/rprod[dim+1]); // dim-th factor matrix
         #pragma omp parallel for
         for (int64_t j = 0; j < M_proj.cols(); ++j) {
-            uint32_t write_i = (j/snewprod[dim-1]) % s[dim];
-            size_t base_write_j = j%snewprod[dim-1] + j/(snewprod[dim-1]*s[dim])*snewprod[dim];
+            uint32_t write_i = (j/snewprod[dim-1]) % r[dim];
+            size_t base_write_j = j%snewprod[dim-1] + j/(snewprod[dim-1]*r[dim])*snewprod[dim];
             for (int32_t i = 0; i < M_proj.rows(); ++i)
                 M(write_i, base_write_j + i*snewprod[dim-1]) = M_proj(i, j);
         }
         if (verbose) {
-            cout << "\tProject (" << dim+1 << ")";
+            cout << "\tUnproject (" << dim+1 << ")";
             if (not cutout[dim].is_standard())
                 cout << " with cutout " << cutout[dim];
             cout << "... " << flush;
@@ -141,6 +146,7 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
     data.resize(snewprod[n]);
+    data.shrink_to_fit();
     #pragma omp parallel for
     for (size_t i = 0; i < snewprod[n]; i++)
         data[i] = M_proj(i/snewprod[n-1], i%snewprod[n-1]);

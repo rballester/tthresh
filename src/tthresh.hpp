@@ -15,7 +15,9 @@ using namespace std::chrono;
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
 
-// Tensor sizes
+// Tensor ranks and sizes
+vector<uint32_t> r;
+vector<size_t> rprod;
 vector<uint32_t> s, snew;
 vector<size_t> sprod, snewprod;
 
@@ -32,7 +34,7 @@ void stop_timer() {
     }
     auto elapsed = std::chrono::high_resolution_clock::now() - times.top();
     times.pop();
-    cout << "Time elapsed: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()/1000. << "ms" << endl << flush;
+    cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()/1000. << "ms" << endl << flush;
 }
 
 int64_t min(int64_t a, int64_t b) {
@@ -41,14 +43,6 @@ int64_t min(int64_t a, int64_t b) {
 
 int64_t max(int64_t a, int64_t b) {
     return (a > b) ? a : b;
-}
-
-void cumulative_size_products(vector<uint32_t>& s, uint8_t n) {
-    // Compute the cumulative products (useful later on for index computations)
-    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
-    sprod[0] = 1;
-    for (uint8_t dim = 0; dim < n; ++dim)
-        sprod[dim+1] = sprod[dim]*s[dim];
 }
 
 void print_usage() {

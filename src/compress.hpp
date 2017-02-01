@@ -24,23 +24,24 @@ using namespace Eigen;
 // (2) n * 4 bytes: tensor sizes
 // (3) 1 byte: tensor type
 // (4) Per-chunk information and masks: n_chunks * (minimum + maximum + compressed mask)
-// (5) Factor matrices
-// (6) The quantized core
+// (5) n * 4 bytes: tensor ranks
+// (6) Factor matrices
+// (7) The quantized core
 
-void encode_factor(MatrixXd & U, uint32_t n_columns, vector < uint8_t >&columns_q) {
+void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
     zlib_write_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
-    zlib_write_stream(reinterpret_cast<uint8_t*> (&columns_q[0]), n_columns*sizeof(uint8_t));
+    zlib_write_stream(reinterpret_cast<uint8_t*> (&U_q[0]), U.cols()*sizeof(uint8_t));
 
     // Finally the matrix itself, quantized
     zlib_open_wbit();
-    for (uint32_t j = 0; j < n_columns; ++j) {
-        for (uint32_t i = 0; i < n_columns; ++i) {
-            uint8_t q = columns_q[j];
+    for (uint32_t j = 0; j < U.cols(); ++j) {
+        for (uint32_t i = 0; i < U.rows(); ++i) {
+            uint8_t q = U_q[j];
             if (q > 0) {
                 q = min(63, q + 2);	// Seems a good compromise
                 uint64_t to_write;
@@ -68,9 +69,9 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         cout << " *****/" << endl << endl;
     }
 
-    /**************************/
+    /***********************/
     // Check input data type
-    /**************************/
+    /***********************/
 
     size_t size = 1; // Total number of tensor elements
     for (uint8_t i = 0; i < n; ++i)
@@ -104,7 +105,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     size_t expected_size = skip_bytes + size * io_type_size;
     ifstream input_stream(input_file.c_str(), ios::in | ios::binary);
     if (!input_stream.is_open()) {
-        cout << "Could not open \"" << input_file << "\"" << endl;
+        cout << "Error: could not open \"" << input_file << "\"" << endl;
         exit(1);
     }
     size_t fsize = input_stream.tellg(); // Check that buffer size matches expected size
@@ -118,11 +119,10 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         for (uint8_t i = 1; i < n; ++i)
             cout << "*" << s[i];
         cout << ")*" << int(io_type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
-        if (expected_size > fsize) {
+        if (expected_size > fsize)
             cout << " (" << expected_size / double (fsize) << " times too small)";
-        } else {
+        else
             cout << " (" << fsize / double (expected_size) << " times too large)";
-        }
         if (skip_bytes == 0 and expected_size < fsize and fsize < expected_size + 1000) {
             cout << ". Perhaps the file has a header (use flag -k)?";
         }
@@ -181,7 +181,10 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         delete[]in;
     if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
 
-    cumulative_size_products(s, n);
+    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    sprod[0] = 1;
+    for (uint8_t i = 0; i < n; ++i)
+        sprod[i+1] = sprod[i]*s[i];
 
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric
@@ -373,6 +376,27 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     if (verbose)
         stop_timer();
 
+    /*******************************/
+    // Compute and save tensor ranks
+    /*******************************/
+
+    r = vector<uint32_t> (n);
+    rprod = vector<size_t> (n+1);
+    rprod[0] = 1;
+    for (uint8_t i = 0; i < n; ++i) {
+        for (uint32_t j = 0; j < s[i]; ++j)
+            if (Us_q[i][j])
+                r[i] = j+1;
+        rprod[i+1] = rprod[i]*r[i];
+    }
+    if (verbose) {
+        cout << "Compressed tensor ranks:";
+        for (uint8_t i = 0; i < n; ++i)
+            cout << " " << r[i];
+        cout << endl;
+    }
+    zlib_write_stream(reinterpret_cast<unsigned char*> (&r[0]), n*sizeof(r[0]));
+
     /*********************************/
     // Encode and save factor matrices
     /*********************************/
@@ -385,11 +409,10 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
             cout << endl;
         }
     }
-
     if (verbose)
         start_timer("Encoding factor matrices... ");
     for (uint8_t i = 0; i < n; ++i)
-        encode_factor(Us[i], s[i], Us_q[i]);
+        encode_factor(Us[i].leftCols(r[i]), Us_q[i]);
     if (verbose)
         stop_timer();
 
@@ -401,7 +424,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         start_timer("Saving core quantization... ");
     zlib_open_wbit();
     for (size_t i = 0; i < size; ++i) {
-        uint8_t q = chunk_ids[i] - 1;
+        uint8_t q = chunk_ids[i]-1;
         if (q > 0)
             zlib_write_bit(*reinterpret_cast<uint64_t*> (&c[i]), q+1);
     }
@@ -411,9 +434,9 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     delete[] c;
     close_zlib_write();
 
-    /******************************************************************/
-    // Compute and display statistics of the resulting compression rate
-    /******************************************************************/
+    /*******************************************************************/
+    // Compute and display statistics of the resulting compression ratio
+    /*******************************************************************/
 
     size_t newbits = zs.total_written_bytes * 8;
     cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionratio = " << size * io_type_size * 8L / double (newbits)

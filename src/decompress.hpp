@@ -11,27 +11,27 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd & U, uint32_t n_columns) {
+void decode_factor(MatrixXd & U, uint32_t n_rows, uint32_t n_cols) {
 
-    U = MatrixXd(n_columns, n_columns);
+    U = MatrixXd(n_rows, n_cols);
 
     // First, the matrix's maximum, used for quantization
     double maximum;
     zlib_read_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
 
     // Next, the q for each column
-    vector<uint8_t> U_q(n_columns);
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&U_q[0]), n_columns*sizeof(uint8_t));
+    vector<uint8_t> U_q(n_cols);
+    zlib_read_stream(reinterpret_cast<uint8_t*> (&U_q[0]), n_cols*sizeof(uint8_t));
 
     // Finally we can dequantize the matrix
     zlib_open_rbit();
-    for (uint32_t j = 0; j < n_columns; ++j) {
-        for (uint32_t i = 0; i < n_columns; ++i) {
+    for (uint32_t j = 0; j < n_cols; ++j) {
+        for (uint32_t i = 0; i < n_rows; ++i) {
             uint8_t q = U_q[j];
             if (q > 0) {
                 q = min(63, q + 2);
                 uint64_t quant = zlib_read_bits(q+1);
-                if (q == 63) // The matrix value is read verbatim as a double and we get 0 error
+                if (q == 63) // The matrix value is read verbatim as a double and we get 0 error (except machine round-off)
                     memcpy(&U(i, j), (void*)&quant, sizeof(quant));
                 else { // We dequantize this matrix value
                     uint8_t sign = (quant >> q) & 1UL; // Read the sign bit
@@ -47,7 +47,10 @@ void decode_factor(MatrixXd & U, uint32_t n_columns) {
 
 void decompress(string compressed_file, string output_file, double *data, vector<Slice>& cutout, bool verbose, bool debug) {
 
+    /***************************************************/
     // Read output tensor dimensionality, sizes and type
+    /***************************************************/
+
     open_zlib_read(compressed_file);
     uint8_t n;
     zlib_read_stream(reinterpret_cast<uint8_t*> (&n), sizeof(n));
@@ -102,6 +105,11 @@ void decompress(string compressed_file, string output_file, double *data, vector
         io_type_size = sizeof(float);
     else
         io_type_size = sizeof(double);
+
+    /****************************/
+    // Read and decode core masks
+    /****************************/
+
     vector<double> minimums;
     vector<double> maximums;
     vector<uint8_t> chunk_ids(size, 0);
@@ -179,25 +187,61 @@ void decompress(string compressed_file, string output_file, double *data, vector
     if (verbose)
         stop_timer();
 
+    /*******************/
+    // Read tensor ranks
+    /*******************/
+
+    r = vector<uint32_t> (n);
+    zlib_read_stream(reinterpret_cast<uint8_t*> (&r[0]), n*sizeof(uint32_t));
+    rprod = vector<size_t> (n+1);
+    rprod[0] = 1;
+    for (uint8_t i = 0; i < n; ++i)
+        rprod[i+1] = rprod[i]*r[i];
+    if (verbose) {
+        cout << "Compressed tensor ranks:";
+        for (uint8_t i = 0; i < n; ++i)
+            cout << " " << r[i];
+        cout << endl;
+    }
+
+    /**********************/
     // Read factor matrices
+    /**********************/
+
     if (verbose)
         start_timer("Decoding factor matrices... ");
     vector < MatrixXd > Us(n);
     for (uint8_t i = 0; i < n; ++i)
-        decode_factor(Us[i], s[i]);
+        decode_factor(Us[i], s[i], r[i]);
     if (verbose)
         stop_timer();
     
-    // Recover the quantized core and dequantize it
+    /*******************************************/
+    // Read the quantized core and dequantize it
+    /*******************************************/
+
     if (verbose)
         start_timer("Dequantizing core... ");
-    vector<double> c(size);
+    vector<double> c(rprod[n]);
     zlib_open_rbit();
-    for (size_t i = 0; i < size; ++i) {
-        uint8_t q = chunk_ids[i] - 1;
+    size_t index = 0; // Where to read from in the original core
+    vector<size_t> indices(n, 0);
+    uint8_t pos = 0;
+    for (size_t i = 0; i < rprod[n]; ++i) { // i marks where to write in the new rank-reduced core
+        uint8_t q = chunk_ids[index]-1;
+        indices[0]++;
+        index++;
+        pos = 0;
+        // We update all necessary indices in cascade, left to right. pos == n-1 => i == rprod[n]-1 => we are done
+        while (indices[pos] >= r[pos] and pos < n-1) {
+            indices[pos] = 0;
+            index += sprod[pos+1] - r[pos]*sprod[pos];
+            indices[pos+1]++;
+            pos++;
+        }
         if (q > 0) {
-	    double chunk_min = minimums[q];
-	    double chunk_max = maximums[q];
+            double chunk_min = minimums[q];
+            double chunk_max = maximums[q];
             uint64_t quant = zlib_read_bits(q+1);
             if (q == 63) // The core value is read verbatim as a double and we get 0 error
                 memcpy(&c[i], (void*)&quant, sizeof(quant));
@@ -215,11 +259,19 @@ void decompress(string compressed_file, string output_file, double *data, vector
     if (verbose)
         stop_timer();
 
+    /************************/
+    // Reconstruct the tensor
+    /************************/
+
     if (verbose)
         start_timer("Reconstructing tensor...\n");
     hosvd_decompress(c, Us, verbose, cutout);
     if (verbose)
         stop_timer();
+
+    /***********************************/
+    // Cast and write the result on disk
+    /***********************************/
 
     if (verbose)
         start_timer("Casting and saving final result... ");
