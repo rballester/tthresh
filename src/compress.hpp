@@ -32,13 +32,9 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
 
     // First, the matrix's maximum, used for quantization
     double maximum = U.array().abs().maxCoeff();
-    zlib_write_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
+    zlib_write_bits(*reinterpret_cast<uint64_t*> (&maximum), 64);
 
-    // Next, the q for each column
-    zlib_write_stream(reinterpret_cast<uint8_t*> (&U_q[0]), U.cols()*sizeof(uint8_t));
-
-    // Finally the matrix itself, quantized
-    zlib_open_wbit();
+    // Then the matrix itself, quantized
     for (uint32_t j = 0; j < U.cols(); ++j) {
         for (uint32_t i = 0; i < U.rows(); ++i) {
             uint8_t q = U_q[j];
@@ -52,11 +48,10 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
                     if (U(i, j) < 0)
                         to_write |=  1UL << q;// The sign is the most significant bit
                 }
-                zlib_write_bit(to_write, q+1);
+                zlib_write_bits(to_write, q+1);
             }
         }
     }
-    zlib_close_wbit();
 }
 
 double *compress(string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
@@ -321,9 +316,9 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
             chunk_ids[index] = chunk_num;
 
             // We use this loop also to update the needed quantization bits per factor column
-            for (uint8_t i = 0; i < n; ++i) {
-                size_t coord = index % sprod[i+1] / sprod[i];
-                Us_q[i][coord] = max(Us_q[i][coord], q);
+            for (uint8_t dim = 0; dim < n; ++dim) {
+                size_t coord = index % sprod[dim+1] / sprod[dim];
+                Us_q[dim][coord] = max(Us_q[dim][coord], q);
             }
         }
 
@@ -406,7 +401,11 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     if (verbose)
         start_timer("Encoding factor matrices... ");
     for (uint8_t i = 0; i < n; ++i)
+        zlib_write_stream(reinterpret_cast<uint8_t*> (&Us_q[i][0]), r[i]*sizeof(uint8_t));
+    zlib_open_wbit();
+    for (uint8_t i = 0; i < n; ++i)
         encode_factor(Us[i].leftCols(r[i]), Us_q[i]);
+    zlib_close_wbit();
     if (verbose)
         stop_timer();
 
@@ -420,7 +419,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     for (size_t i = 0; i < size; ++i) {
         uint8_t q = chunk_ids[i]-1;
         if (q > 0)
-            zlib_write_bit(*reinterpret_cast<uint64_t*> (&c[i]), q+1);
+            zlib_write_bits(*reinterpret_cast<uint64_t*> (&c[i]), q+1);
     }
     zlib_close_wbit();
     if (verbose)

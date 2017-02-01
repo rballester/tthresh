@@ -11,20 +11,15 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd& U, uint32_t n_rows, uint32_t n_cols) {
-
-    U = MatrixXd(n_rows, n_cols);
+void decode_factor(MatrixXd& U, vector<uint8_t>& U_q, uint32_t n_rows, uint32_t n_cols) {
 
     // First, the matrix's maximum, used for quantization
     double maximum;
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&maximum), sizeof(maximum));
+    uint64_t tmp = zlib_read_bits(64);
+    memcpy(&maximum, (void*)&tmp, sizeof(tmp));
 
-    // Next, the q for each column
-    vector<uint8_t> U_q(n_cols);
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&U_q[0]), n_cols*sizeof(uint8_t));
-
-    // Finally we can dequantize the matrix
-    zlib_open_rbit();
+    // Then we can dequantize the matrix
+    U = MatrixXd(n_rows, n_cols);
     for (uint32_t j = 0; j < n_cols; ++j) {
         for (uint32_t i = 0; i < n_rows; ++i) {
             uint8_t q = U_q[j];
@@ -205,9 +200,17 @@ void decompress(string compressed_file, string output_file, double *data, vector
 
     if (verbose)
         start_timer("Decoding factor matrices... ");
+
+    // Compute the needed quantization bits per factor column
     vector < MatrixXd > Us(n);
+    vector< vector<uint8_t> > Us_q(n);
+    for (uint8_t i = 0; i < n; ++i) {
+        Us_q[i] = vector<uint8_t> (r[i]);
+        zlib_read_stream(reinterpret_cast<uint8_t*> (&Us_q[i][0]), r[i]*sizeof(uint8_t));
+    }
+    zlib_open_rbit();
     for (uint8_t i = 0; i < n; ++i)
-        decode_factor(Us[i], s[i], r[i]);
+        decode_factor(Us[i], Us_q[i], s[i], r[i]);
     if (verbose)
         stop_timer();
     

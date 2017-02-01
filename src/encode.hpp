@@ -138,7 +138,7 @@ void encode(vector<size_t>& rle) {
 
     // Number of key/code pairs
     uint32_t dict_size = codes.size();
-    zlib_write_bit(dict_size, sizeof(int)*8);
+    zlib_write_bits(dict_size, sizeof(int)*8);
 
     // Key/code pairs
     for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
@@ -153,25 +153,25 @@ void encode(vector<size_t>& rle) {
             key_len++;
         }
         key_len = max(1, key_len); // A 0 still requires 1 bit for us
-        zlib_write_bit(key_len, 6);
+        zlib_write_bits(key_len, 6);
 
         // Next, the key itself
-        zlib_write_bit(key, key_len);
+        zlib_write_bits(key, key_len);
 
         // Now, the code's length
-        zlib_write_bit(code_lens[key], 6);
+        zlib_write_bits(code_lens[key], 6);
 
         // Finally, the code itself
-        zlib_write_bit(it->second, code_lens[key]);
+        zlib_write_bits(it->second, code_lens[key]);
     }
 
     // Number N of symbols to code
     uint64_t n_symbols = rle.size();
-    zlib_write_bit(n_symbols, sizeof(n_symbols)*8);
+    zlib_write_bits(n_symbols, sizeof(n_symbols)*8);
 
     // Now the N codes
     for (size_t i = 0; i < rle.size(); ++i)
-        zlib_write_bit(codes[rle[i]], code_lens[rle[i]]);
+        zlib_write_bits(codes[rle[i]], code_lens[rle[i]]);
 
     zlib_close_wbit();
 }

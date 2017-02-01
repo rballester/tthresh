@@ -34,6 +34,7 @@ void cumulative_products(vector<uint32_t>& in, vector<size_t>& out) {
 }
 
 stack<high_resolution_clock::time_point> times;
+
 void start_timer(string message) {
     cout << message << flush;
     times.push(std::chrono::high_resolution_clock::now());

@@ -95,7 +95,7 @@ void zlib_open_wbit() {
 }
 
 // Assumption: to_write <= 64
-void zlib_write_bit(unsigned long int bits, char to_write) {
+void zlib_write_bits(uint64_t bits, char to_write) {
     if (to_write <= zs.wbit+1) {
         zs.wbytes |= bits << (zs.wbit+1-to_write);
         zs.wbit -= to_write;
