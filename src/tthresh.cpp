@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     Target target = eps;
     double target_value = -1;
     size_t skip_bytes = 0; // Used to skip headers of a specified size
-    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, verbose_flag = false, debug_flag = false;
+    bool input_flag = false, compressed_flag = false, output_flag = false, io_type_flag = false, sizes_flag = false, target_flag = false, skip_bytes_flag = false, autocrop_flag = false, verbose_flag = false, debug_flag = false;
     string input_file;
     string compressed_file;
     string output_file;
@@ -106,6 +106,11 @@ int main(int argc, char *argv[])
                 mode = skip_bytes_mode;
                 skip_bytes_flag = true;
                 continue;
+            case 'a':
+                if (autocrop_flag)
+                    display_error("Flag -a already set");
+                autocrop_flag = true;
+                continue;
             case 'v':
                 if (verbose_flag)
                     display_error("Flag -v already set");
@@ -166,28 +171,35 @@ int main(int argc, char *argv[])
     if (input_flag) {
         if (input_file == "")
             display_error("Specify a valid input file name");
-        if (!io_type_flag)
+        if (not io_type_flag)
             display_error("Specify an I/O type (-t)");
-        if (!sizes_flag or target_value < 0)
+        if (not sizes_flag or target_value < 0)
             display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
         if (s.size() < 3)
             display_error("Specify 3 or more integer sizes after -s");
     }
+    else if (skip_bytes_flag)
+        display_error("Flag -k needs -i");
 
-    if (!compressed_flag or compressed_file == "")
+    if (not compressed_flag or compressed_file == "")
         display_error("Specify a file name for the compressed data set (-c)");
 
     if (output_flag) {
-        if (output_flags.size() == 0)
+        if (output_flags.size() == 0 or output_flags[output_flags.size()-1] == "")
             display_error("Specify a valid output file name");
         if (not input_flag and(io_type_flag or sizes_flag or target_value > 1))
-            display_error("Decompression mode only accepts flags -c, -o, -v and -d");
+            display_error("Decompression mode only accepts flags -c, -o, -v, -d, and -a");
         for (uint32_t j = 0; j < output_flags.size()-1; ++j)
             cutout.push_back(Slice(output_flags[j]));
         output_file = output_flags[output_flags.size()-1];
     }
+    else if (autocrop_flag)
+        display_error("Flag -a needs -o");
 
-    if (!input_flag and ! output_flag)
+    if (cutout.size() > 0 and autocrop_flag)
+        display_error("A cutout subtensor cannot be specified if -a is set");
+
+    if (not input_flag and not output_flag)
         display_error("Specify at least one of the flags -i and -o");
 
     if (input_flag and io_type != "uchar" and io_type != "ushort" and io_type != "int" and io_type != "float" and io_type != "double")
@@ -201,7 +213,7 @@ int main(int argc, char *argv[])
     if (input_flag)
         data = compress(input_file, compressed_file, io_type, target, target_value, skip_bytes, verbose_flag, debug_flag);
     if (output_flag)
-        decompress(compressed_file, output_file, data, cutout, verbose_flag, debug_flag);
+        decompress(compressed_file, output_file, data, cutout, autocrop_flag, verbose_flag, debug_flag);
     delete[] (data-skip_bytes);
 
     return 0;

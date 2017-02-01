@@ -11,15 +11,27 @@ using namespace std::chrono;
 // Size (in bytes) for all I/O buffers
 #define CHUNK (1<<18)
 
+// Rows whose squared norm is larger than this will be cropped away
+#define AUTOCROP_THRESHOLD (1e-10)
+
 // Compression parameters
 enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, sizes_mode, target_mode, skip_bytes_mode };
 enum Target { eps, rmse, psnr };
 
-// Tensor ranks and sizes
+// Tensor dimensionality, ranks and sizes. They are only set, never modified
+uint8_t n;
 vector<uint32_t> r;
 vector<size_t> rprod;
 vector<uint32_t> s, snew;
 vector<size_t> sprod, snewprod;
+
+void cumulative_products(vector<uint32_t>& in, vector<size_t>& out) {
+    uint8_t n = s.size();
+    out = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
+    out[0] = 1;
+    for (uint8_t i = 0; i < n; ++i)
+        out[i+1] = out[i]*in[i];
+}
 
 stack<high_resolution_clock::time_point> times;
 void start_timer(string message) {
@@ -72,6 +84,11 @@ void print_usage() {
     cout << "Optional compression parameters:" << endl;
     cout << endl;
     cout << "\t-k <n>                    - Skip n leading bytes, for e.g. removing a header (integer)" << endl;
+    cout << endl;
+
+    cout << "Optional decompression parameters:" << endl;
+    cout << endl;
+    cout << "\t-a                        - Autocrop: restrict reconstruction to its bounding box (resulting sizes will be printed)" << endl;
     cout << endl;
 
     cout << "Examples:" << endl;

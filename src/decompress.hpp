@@ -11,7 +11,7 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd & U, uint32_t n_rows, uint32_t n_cols) {
+void decode_factor(MatrixXd& U, uint32_t n_rows, uint32_t n_cols) {
 
     U = MatrixXd(n_rows, n_cols);
 
@@ -45,14 +45,13 @@ void decode_factor(MatrixXd & U, uint32_t n_rows, uint32_t n_cols) {
     }
 }
 
-void decompress(string compressed_file, string output_file, double *data, vector<Slice>& cutout, bool verbose, bool debug) {
+void decompress(string compressed_file, string output_file, double *data, vector<Slice>& cutout, bool autocrop, bool verbose, bool debug) {
 
     /***************************************************/
     // Read output tensor dimensionality, sizes and type
     /***************************************************/
 
     open_zlib_read(compressed_file);
-    uint8_t n;
     zlib_read_stream(reinterpret_cast<uint8_t*> (&n), sizeof(n));
     s = vector<uint32_t> (n);
     zlib_read_stream(reinterpret_cast<uint8_t*> (&s[0]), n * sizeof(s[0]));
@@ -62,18 +61,14 @@ void decompress(string compressed_file, string output_file, double *data, vector
         for (uint32_t j = cutout.size(); j < s.size(); ++j)
             cutout.push_back(Slice(0, -1, 1));
 
+    cumulative_products(s, sprod);
+    size_t size = sprod[n];
     snew = vector<uint32_t> (n);
-    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
-    sprod[0] = 1;
-    snewprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains snew[0]*...*snew[i-1]
-    snewprod[0] = 1;
     for (uint8_t i = 0; i < n; ++i) {
-        sprod[i+1] = sprod[i]*s[i];
         cutout[i].update(s[i]);
         snew[i] = cutout[i].get_size();
-        snewprod[i+1] = snewprod[i]*snew[i];
     }
-    size_t size = sprod[n];
+    cumulative_products(snew, snewprod);
 
     if (verbose) {
         cout << endl << "/***** Decompression: " << to_string(n) << "D tensor of size ";
@@ -259,6 +254,36 @@ void decompress(string compressed_file, string output_file, double *data, vector
     if (verbose)
         stop_timer();
 
+    /*************************/
+    // Autocrop (if requested)
+    /*************************/
+
+    if (autocrop) {
+        cout << "autocropsize =";
+        for (uint8_t dim = 0; dim < n; ++dim) {
+            uint32_t start_row = 0, end_row = 0;
+            bool start_set = false;
+            for (int i = 0; i < Us[dim].rows(); ++i) {
+                double sqnorm = 0;
+                for (int j = 0; j < Us[dim].cols(); ++j)
+                    sqnorm += Us[dim](i,j)*Us[dim](i,j);
+                if (sqnorm > AUTOCROP_THRESHOLD) {
+                    if (not start_set) {
+                        start_row = i;
+                        start_set = true;
+                    }
+                    end_row = i+1;
+                }
+            }
+            cutout[dim].points[0] = start_row;
+            cutout[dim].points[1] = end_row;
+            snew[dim] = end_row-start_row;
+            cout << " " << end_row-start_row;
+        }
+        cout << endl;
+        cumulative_products(snew, snewprod);
+    }
+
     /************************/
     // Reconstruct the tensor
     /************************/
@@ -299,7 +324,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
             buffer_wpos = 0;
             output_stream.write(reinterpret_cast<const char*>(&buffer[0]), io_type_size * buf_elems);
         }
-        if (whole_reconstruction and data != NULL) {
+        if (whole_reconstruction and not autocrop and data != NULL) {
             datanorm += data[i] * data[i];
             sse += (data[i] - c[i]) * (data[i] - c[i]);
             datamin = min(datamin, data[i]);
@@ -312,7 +337,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     if (verbose)
         stop_timer();
 
-    if (whole_reconstruction and data != NULL) {	// If the uncompressed input is available, we compute the error statistics
+    if (whole_reconstruction and not autocrop and data != NULL) {	// If the uncompressed input is available, we compute the error statistics
         datanorm = sqrt(datanorm);
         double eps = sqrt(sse) / datanorm;
         double rmse = sqrt(sse / size);

@@ -43,7 +43,7 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
         for (uint32_t i = 0; i < U.rows(); ++i) {
             uint8_t q = U_q[j];
             if (q > 0) {
-                q = min(63, q + 2);	// Seems a good compromise
+                q = min(63, q + 2);	// A good compromise
                 uint64_t to_write;
                 if (q == 63)
                     to_write = *reinterpret_cast<uint64_t*>(&U(i,j));
@@ -61,21 +61,20 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
 
 double *compress(string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
 
-    uint8_t n = s.size();
+    n = s.size();
     if (verbose) {
         cout << endl << "/***** Compression: " << to_string(n) << "D tensor of size " << s[0];
         for (uint8_t i = 1; i < n; ++i)
             cout << " x " << s[i];
         cout << " *****/" << endl << endl;
     }
+    cumulative_products(s, sprod);
 
     /***********************/
     // Check input data type
     /***********************/
 
-    size_t size = 1; // Total number of tensor elements
-    for (uint8_t i = 0; i < n; ++i)
-        size *= s[i];
+    size_t size = sprod[n]; // Total number of tensor elements
     uint8_t io_type_size, io_type_code;
     if (io_type == "uchar") {
         io_type_size = sizeof(unsigned char);
@@ -180,11 +179,6 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     if (io_type_code != 4)
         delete[]in;
     if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
-
-    sprod = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
-    sprod[0] = 1;
-    for (uint8_t i = 0; i < n; ++i)
-        sprod[i+1] = sprod[i]*s[i];
 
     /**********************************************************************/
     // Compute the target SSE (sum of squared errors) from the given metric

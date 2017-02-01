@@ -100,8 +100,6 @@ void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
 // Reads a tensor in the buffer data of size s, and decompresses it in-place
 void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, vector<Slice>& cutout)
 {
-    uint8_t n = s.size();
-
     if (rprod[n] == 0) { // Extreme case: 0 ranks
         data = vector<double> (snewprod[n], 0); // Produce a 0 reconstruction of the expected size, and leave
         return;

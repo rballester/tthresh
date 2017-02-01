@@ -19,9 +19,9 @@ public:
     Slice(string description); // Create a slice from its NumPy-like description
     const uint32_t get_size(); // Number of elements encompassed by the slice
     const bool is_standard(); // Whether it is the (0,1,-1) slice (equivalent to doing nothing)
+    void update(uint32_t size);
 
     friend ostream& operator<<(ostream& os, const Slice& slice);
-    void update(uint32_t size);
 };
 
 Slice::Slice(int32_t lower, int32_t upper, int32_t stride, bool downsample=false) {
@@ -66,23 +66,15 @@ Slice::Slice(string description) {
     }
     else
         display_error("Slicing argument \""+description+"\" not understood");
+    assert(points[2] != 0);
 }
 
 const uint32_t Slice::get_size() {
-    assert(points[1] > 0);
     return ceil((points[1]-points[0])/double(points[2]));
 }
 
 const bool Slice::is_standard() {
     return points[0] == 0 and (points[1] == -1 or points[1] == max_upper) and points[2] == 1;
-}
-
-ostream& operator<<(ostream& os, const Slice& slice)
-{
-    char delim = ':';
-    if (slice.downsample) delim = '/';
-    os << slice.points[0] << delim << slice.points[1] << delim << slice.points[2];
-    return os;
 }
 
 void Slice::update(uint32_t size) {
@@ -91,6 +83,14 @@ void Slice::update(uint32_t size) {
     else if (points[2] > 0 and points[1] == -1)
         points[1] = size;
     max_upper = size;
+}
+
+ostream& operator<<(ostream& os, const Slice& slice)
+{
+    char delim = ':';
+    if (slice.downsample) delim = '/';
+    os << slice.points[0] << delim << slice.points[1] << delim << slice.points[2];
+    return os;
 }
 
 #endif // SLICE_HPP
