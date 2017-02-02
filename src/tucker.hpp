@@ -39,43 +39,43 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
             cout << "Error: unfeasible slicing" << endl;
             exit(1);
         }
-        MatrixXd selection = MatrixXd::Zero(slice.get_size(), U.rows());
+        MatrixXd convolution = MatrixXd::Zero(slice.get_size(), U.rows()); // convolution*U convolves U along the columns
         #pragma omp parallel for
         for (uint32_t i = 0; i < slice.get_size(); ++i) {
             switch (slice.reduction) {
                 case Decimation: {
-                    selection(i, slice.points[0]+i*slice.points[2]) = 1;
+                    convolution(i, slice.points[0]+i*slice.points[2]) = 1; // Delta kernel
                     break;
                 }
                 case Box: {
                     int32_t start = slice.points[0] + i*slice.points[2] - slice.points[2]/2;
                     int32_t end = max(min(slice.points[0] + i*slice.points[2] + (slice.points[2] - slice.points[2]/2), U.rows()), 0);
-                    double kernel = 1./abs  (end-start);
+                    double kernel_sum = 1./abs(end-start);
                     for (int32_t j = start; sign*j < sign*end; j += sign)
-                        selection(i, j) = kernel;
+                        convolution(i, j) = kernel_sum; // Box kernel
                     break;
                 }
                 case Lanczos: {
                     double a = 2*slice.points[2]; // Upscaled Lanczos window
-                    int32_t start = max(min(slice.points[0] + i*slice.points[2] - a/2, U.rows()-1), 0);
-                    int32_t end = max(min(slice.points[0] + i*slice.points[2] + a/2, U.rows()), -1);
+                    int32_t start = max(min(slice.points[0] + i*slice.points[2] - a, U.rows()-1), 0); // Kernel support: [-a, a], clamped
+                    int32_t end = max(min(slice.points[0] + i*slice.points[2] + a + 1, U.rows()), -1);
                     double center = slice.points[0] + i*slice.points[2];
                     double kernel_sum = 0;
                     for (int32_t j = start; sign*j < sign*end; j += sign) {
-                        double x = (j-center)/abs(slice.points[2]);
+                        double x = (j-center)/abs(slice.points[2]); // Upscaled x
                         if (x == 0)
-                            selection(i, j) = 1;
+                            convolution(i, j) = 1;
                         else
-                            selection(i, j) = a*sin(M_PI*x)*sin(M_PI*x/a)/(M_PI*M_PI*x*x);
-                        kernel_sum += selection(i, j);
+                            convolution(i, j) = a*sin(M_PI*x)*sin(M_PI*x/a)/(M_PI*M_PI*x*x); // Lanczos 2 kernel
+                        kernel_sum += convolution(i, j);
                     }
                     for (int32_t j = start; sign*j < sign*end; j += sign)
-                        selection(i, j) /= kernel_sum; // Normalize (important near the borders)
+                        convolution(i, j) /= kernel_sum; // Normalize the kernel so that it adds up to 1
                     break;
                 }
             }
         }
-        M_proj = (selection * U) * M;
+        M_proj = (convolution * U) * M;
     }
     else
         M_proj = U * M;

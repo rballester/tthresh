@@ -70,7 +70,7 @@ void print_usage() {
     cout << "\t-o [cutout] <output file> - If given, the compressed file (-c) will be decompressed to this file name (string)" << endl;
     cout << "\t                            \tIf [cutout] is given, a downsampled tensor will be reconstructed." << endl;
     cout << "\t                            \tThis is specified as in NumPy's slicing notation: start:stop:step" << endl;
-    cout << "\t                            \tUse the separator ':' for decimation; '/' for box filter downsampling; 'l' for Lanczos" << endl;
+    cout << "\t                            \tUse the separator ':' for decimation; '/' for box filter downsampling; 'l' for separable Lanczos-2" << endl;
     cout << "\t-v                        - Verbose mode; prints main algorithm steps" << endl;
     cout << "\t-d                        - Print debug information" << endl;
     cout << endl;
