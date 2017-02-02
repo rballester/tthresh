@@ -7,13 +7,16 @@
 
 using namespace std;
 
+// Cutout/downsampling modes
+enum Reduction { Decimation, Box, Lanczos };
+
 class Slice {
 
 public:
 
     int32_t points[3] = {INT32_MAX, INT32_MAX, 1};
     int32_t max_upper = INT32_MAX;
-    bool downsample = false;
+    Reduction reduction = Decimation;
 
     Slice(int32_t lower, int32_t stride, int32_t upper, bool downsample);  // Create a slice from its data
     Slice(string description); // Create a slice from its NumPy-like description
@@ -36,10 +39,16 @@ Slice::Slice(string description) {
     if (description.find(':') != string::npos)
         delim = ':';
     if (description.find('/') != string::npos) {
-        if (delim == ':')
+        if (delim != 0)
             display_error("Slicing argument \""+description+"\" not understood");
         delim = '/';
-        downsample = true;
+        reduction = Box;
+    }
+    if (description.find('l') != string::npos) {
+        if (delim != 0)
+            display_error("Slicing argument \""+description+"\" not understood");
+        delim = 'l';
+        reduction = Lanczos;
     }
     stringstream ss1(description);
     string token;
@@ -79,7 +88,7 @@ const bool Slice::is_standard() {
 
 void Slice::update(uint32_t size) {
     if (points[0] == -1)
-        points[0] = size;
+        points[0] = size-1;
     else if (points[2] > 0 and points[1] == -1)
         points[1] = size;
     max_upper = size;
@@ -88,7 +97,8 @@ void Slice::update(uint32_t size) {
 ostream& operator<<(ostream& os, const Slice& slice)
 {
     char delim = ':';
-    if (slice.downsample) delim = '/';
+    if (slice.reduction == Box) delim = '/';
+    else if (slice.reduction == Lanczos) delim = 'l';
     os << slice.points[0] << delim << slice.points[1] << delim << slice.points[2];
     return os;
 }

@@ -262,7 +262,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     /*************************/
 
     if (autocrop) {
-        cout << "autocropsize =";
+        cout << "autocrop =";
         for (uint8_t dim = 0; dim < n; ++dim) {
             uint32_t start_row = 0, end_row = 0;
             bool start_set = false;
@@ -281,7 +281,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
             cutout[dim].points[0] = start_row;
             cutout[dim].points[1] = end_row;
             snew[dim] = end_row-start_row;
-            cout << " " << end_row-start_row;
+            cout << " " << start_row << ":" << end_row;
         }
         cout << endl;
         cumulative_products(snew, snewprod);

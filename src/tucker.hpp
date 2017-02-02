@@ -8,7 +8,7 @@ using namespace std;
 using namespace Eigen;
 
 // Projects an unfolded core M into M_proj using the transformation matrix U.
-// U is an output parameter, computed as the HOSVD of the tensor (left singular
+// U is an output parameter and is computed as the HOSVD of the tensor (left singular
 // vectors of M) and M is compressed using U.transpose().
 void project(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj)
 {
@@ -42,14 +42,37 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
         MatrixXd selection = MatrixXd::Zero(slice.get_size(), U.rows());
         #pragma omp parallel for
         for (uint32_t i = 0; i < slice.get_size(); ++i) {
-            if (not slice.downsample)
-                selection(i, slice.points[0]+i*slice.points[2]) = 1;
-            else {
-                int32_t start = slice.points[0]+i*slice.points[2];
-                int32_t end = max(min(slice.points[0]+(i+1)*slice.points[2], U.rows()), 0);
-                double kernel = 1./(end-start);
-                for (int32_t j = start; sign*j < sign*end; j += sign)
-                    selection(i, j) = kernel;
+            switch (slice.reduction) {
+                case Decimation: {
+                    selection(i, slice.points[0]+i*slice.points[2]) = 1;
+                    break;
+                }
+                case Box: {
+                    int32_t start = slice.points[0] + i*slice.points[2] - slice.points[2]/2;
+                    int32_t end = max(min(slice.points[0] + i*slice.points[2] + (slice.points[2] - slice.points[2]/2), U.rows()), 0);
+                    double kernel = 1./abs  (end-start);
+                    for (int32_t j = start; sign*j < sign*end; j += sign)
+                        selection(i, j) = kernel;
+                    break;
+                }
+                case Lanczos: {
+                    double a = 2*slice.points[2]; // Upscaled Lanczos window
+                    int32_t start = max(min(slice.points[0] + i*slice.points[2] - a/2, U.rows()-1), 0);
+                    int32_t end = max(min(slice.points[0] + i*slice.points[2] + a/2, U.rows()), -1);
+                    double center = slice.points[0] + i*slice.points[2];
+                    double kernel_sum = 0;
+                    for (int32_t j = start; sign*j < sign*end; j += sign) {
+                        double x = (j-center)/abs(slice.points[2]);
+                        if (x == 0)
+                            selection(i, j) = 1;
+                        else
+                            selection(i, j) = a*sin(M_PI*x)*sin(M_PI*x/a)/(M_PI*M_PI*x*x);
+                        kernel_sum += selection(i, j);
+                    }
+                    for (int32_t j = start; sign*j < sign*end; j += sign)
+                        selection(i, j) /= kernel_sum; // Normalize (important near the borders)
+                    break;
+                }
             }
         }
         M_proj = (selection * U) * M;
