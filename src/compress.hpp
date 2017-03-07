@@ -28,6 +28,112 @@ using namespace Eigen;
 // (6) Factor matrices
 // (7) The quantized core
 
+class Node {
+public:
+    vector<Node*> children;
+    uint8_t value;
+    Node() {
+        value = 0;
+        children = vector<Node*>(8, NULL);
+    }
+};
+
+void insert(Node* node, vector<size_t>& coords, uint8_t depth) {
+    node->value = 1;
+    if (depth == 7)
+        return;
+    // Get depth-th bits
+//    cerr << "Enter" << endl;
+    uint64_t code = 0;
+    for (uint8_t i = 0; i < coords.size(); ++i)
+        code |= (coords[i] >> (7-depth))&1 << (coords.size()-1-i);
+//    cerr << "code="<<code<<endl;
+    if (node->children[code] == NULL)
+        node->children[code] = new Node();
+//    cerr << "We create depth=" << depth << ", code=" << code << endl;
+    insert(node->children[code], coords, depth+1);
+}
+
+size_t count_bits(Node* node) {
+    if (node == NULL)
+        return 1;
+    size_t result = 1;
+    for (uint8_t child = 0; child < node->children.size(); ++child)
+        result += count_bits(node->children[child]);
+    return result;
+}
+
+map<uint8_t, Node*> nodes;
+size_t zerotree(vector<uint8_t>& chunk_ids, uint8_t n_chunks) {
+    size_t total_bits = 0;
+    for (uint8_t chunk_id = 1; chunk_id <= n_chunks; ++chunk_id) {
+        Node* root = new Node();
+        nodes[chunk_id] = root;
+        for (size_t i = 0; i < sprod[n]; ++i) {
+            if (chunk_ids[i] == chunk_id) {
+                vector<size_t> coords; // ND coordinates
+                for (uint8_t dim = 0; dim < n; ++dim)
+                    coords.push_back(i % sprod[dim+1] / sprod[dim]);
+                insert(root, coords, 0);
+            }
+        }
+        size_t newbits = count_bits(root);
+        cerr << "chunk_id=" << int(chunk_id) << ", newbits=" << newbits << endl;
+        total_bits += newbits;
+    }
+    return total_bits;
+}
+
+void decode_zerotree(vector<uint8_t>& chunk_ids, uint8_t chunk_num, vector<uint8_t>& coords, int8_t depth, Node* node) {
+//    if (depth >= 0) {
+//        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+//            coords[coord] |= ((child >> (coords.size()-1-coord))&1) << (7-depth);
+//    }
+//    if (depth == 7 and node->value) {
+//        size_t index = 0;
+//        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+//            index += coords[coord]*sprod[coord];
+//        chunk_ids[index] = chunk_num;
+//    }
+//    if (depth < 7) {
+//        for (uint8_t child = 0; child < node->children.size(); ++child) {
+//            if (node->children[child] != NULL)
+//                decode_zerotree(chunk_ids, chunk_num, coords, depth+1, node->children[child]);
+//        }
+//    }
+//    if (depth >= 0) {
+//        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+//            coords[coord] ^= (-0 ^ coord) & (1 << (7-depth));
+//    }
+    if (node == NULL) {
+        cerr << "ERROR" << endl;
+        exit(1);
+    }
+    if (depth == 7) {
+        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+            coords[coord] |= node->value << (7-depth);
+        size_t index = 0;
+        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+            index += coords[coord]*sprod[coord];
+        chunk_ids[index] = chunk_num;
+//        cerr << "chunk_ids[" << index << "] = " << int(chunk_num) << endl;
+        for (uint8_t coord = 0; coord < coords.size(); ++coord)
+            coords[coord] ^= (-0 ^ coord) & (1 << (7-depth));
+        return;
+    }
+    for (uint8_t child = 0; child < node->children.size(); ++child) {
+//        cerr << int(child) << endl;
+        if (node->children[child] != NULL) {
+            for (uint8_t coord = 0; coord < coords.size(); ++coord)
+                coords[coord] |= ((child >> (coords.size()-1-coord))&1) << (7-depth);
+            decode_zerotree(chunk_ids, chunk_num, coords, depth+1, node->children[child]);
+            for (uint8_t coord = 0; coord < coords.size(); ++coord)
+                coords[coord] ^= (-0 ^ coord) & (1 << (7-depth));
+        }
+
+    }
+}
+
 void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
 
     // First, the matrix's maximum, used for quantization
@@ -41,7 +147,7 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
         for (uint32_t i = 0; i < U.rows(); ++i) {
             uint8_t q = U_q[j];
             if (q > 0) {
-                q = min(63, q + 2);	// A good compromise
+                q = min(63, q + 2); // A good compromise
                 uint64_t to_write;
                 if (q == 63)
                     to_write = *reinterpret_cast<uint64_t*>(&U(i,j));
@@ -370,6 +476,18 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         stop_timer();
     if (debug)
         cout << "Total qbits=" << total_qbits << ", total hbits=" << total_hbits << endl;
+
+    cerr << "****************" << endl;
+    cerr << "Check 1: " << int(chunk_ids[16678462]) << endl;
+//    cerr << "Check 1: " << chunk_ids[16678462] << endl;
+
+    cerr << zerotree(chunk_ids, chunk_num);
+    vector<uint8_t> chunk_ids2(size, 0);
+    vector<uint8_t> coords(3, 0);
+    if (nodes[1] == NULL)
+        cerr << "WRONG" << endl;
+//    decode_zerotree(chunk_ids2, 1, coords, 0, nodes[1]);
+    cerr << "****************" << endl;
 
     /*******************************/
     // Compute and save tensor ranks
