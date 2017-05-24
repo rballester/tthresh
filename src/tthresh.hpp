@@ -97,9 +97,9 @@ void print_usage() {
     cout << "\ttthresh -i data -t uchar -s 256^3 -p 40 -c data.tthresh -o data.decompressed - Compress and decompress a volume of unsigned chars with PSNR = 40" << endl;
     cout << "\ttthresh -i data -k 16 -t float -s 128 256 64 100 -p 40 -c data.tthresh       - Compress a 4D tensor (e.g. time-dependent volume), skipping the first 16 bytes (header)" << endl;
     cout << "\ttthresh -i data -t double -s 2^20 -p 40 -c data.tthresh                      - Compress a 1D signal with ~1M points by reshaping it into a 2^20 tensor" << endl;
-    cout << "\ttthresh -c data.tthresh -d ::2 ::2 ::2 data.decompressed                     - Decompress only the even tensor indices (final size: x8 smaller)" << endl;
-    cout << "\ttthresh -c data.tthresh -d :: :: 1 data.decompressed                         - Decompress the first z-slice" << endl;
-    cout << "\ttthresh -c data.tthresh -d ll4 ::-1 ::-1 data.decompressed                   - Downsample x4 along the x-axis, invert the data along the other two axes" << endl;
+    cout << "\ttthresh -c data.tthresh -o ::2 ::2 ::2 data.decompressed                     - Decompress only the even tensor indices (final size: x8 smaller)" << endl;
+    cout << "\ttthresh -c data.tthresh -o :: :: 1 data.decompressed                         - Decompress the first z-slice" << endl;
+    cout << "\ttthresh -c data.tthresh -o ll4 ::-1 ::-1 data.decompressed                   - Lanczos downsample (x4) along the x-axis, invert the data along the other two axes" << endl;
     cout << endl;
 }
 
