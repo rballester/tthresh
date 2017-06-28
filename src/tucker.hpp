@@ -43,7 +43,7 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
         #pragma omp parallel for
         for (uint32_t i = 0; i < slice.get_size(); ++i) {
             switch (slice.reduction) {
-                case Decimation: {
+                case Downsampling: {
                     convolution(i, slice.points[0]+i*slice.points[2]) = 1; // Delta kernel
                     break;
                 }

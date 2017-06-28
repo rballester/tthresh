@@ -8,7 +8,7 @@
 using namespace std;
 
 // Cutout/downsampling modes
-enum Reduction { Decimation, Box, Lanczos };
+enum Reduction { Downsampling, Box, Lanczos };
 
 class Slice {
 
@@ -16,7 +16,7 @@ public:
 
     int32_t points[3] = {INT32_MAX, INT32_MAX, 1};
     int32_t max_upper = INT32_MAX;
-    Reduction reduction = Decimation;
+    Reduction reduction = Downsampling;
 
     Slice(int32_t lower, int32_t stride, int32_t upper, bool downsample);  // Create a slice from its data
     Slice(string description); // Create a slice from its NumPy-like description
@@ -31,7 +31,7 @@ Slice::Slice(int32_t lower, int32_t upper, int32_t stride, bool downsample=false
        points[0] = lower;
        points[1] = upper;
        points[2] = stride;
-       downsample = downsample; // If true, new samples are computed as averages; otherwise, decimation is used
+       downsample = downsample; // If true, new samples are computed as averages; otherwise, no interpolation is used
 }
 
 Slice::Slice(string description) {
