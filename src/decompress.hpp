@@ -311,17 +311,28 @@ void decompress(string compressed_file, string output_file, double *data, vector
     double datanorm = 0;
     double datamin = std::numeric_limits < double >::max();
     double datamax = std::numeric_limits < double >::min();
+    double remapped = 0;
     for (size_t i = 0; i < snewprod[n]; ++i) {
-        if (io_type_code == 0)
-            reinterpret_cast < unsigned char *>(&buffer[0])[buffer_wpos] = max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]));
-        else if (io_type_code == 1)
-            reinterpret_cast < unsigned short *>(&buffer[0])[buffer_wpos] = max(0.0, min(double(std::numeric_limits<unsigned short>::max()), c[i]));
-        else if (io_type_code == 2)
-            reinterpret_cast < int *>(&buffer[0])[buffer_wpos] = c[i];
-        else if (io_type_code == 3)
-            reinterpret_cast < float *>(&buffer[0])[buffer_wpos] = c[i];
-        else
-           reinterpret_cast < double *>(&buffer[0])[buffer_wpos] = c[i];
+        if (io_type_code == 0) {
+	    remapped = (unsigned char)(round(max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]))));
+            reinterpret_cast < unsigned char *>(&buffer[0])[buffer_wpos] = remapped;
+	}
+        else if (io_type_code == 1) {
+	    remapped = (unsigned short)(round(max(0.0, min(double(std::numeric_limits<unsigned short>::max()), c[i]))));
+            reinterpret_cast < unsigned short *>(&buffer[0])[buffer_wpos] = remapped;
+	}
+        else if (io_type_code == 2) {
+	    remapped = int(round(max(std::numeric_limits<int>::min(), min(double(std::numeric_limits<int>::max()), c[i]))));;
+            reinterpret_cast < int *>(&buffer[0])[buffer_wpos] = remapped;
+	}
+        else if (io_type_code == 3) {
+	    remapped = float(c[i]);
+            reinterpret_cast < float *>(&buffer[0])[buffer_wpos] = remapped;
+	}
+        else {
+	   remapped = c[i];
+           reinterpret_cast < double *>(&buffer[0])[buffer_wpos] = remapped;
+	}
         buffer_wpos++;
         if (buffer_wpos == buf_elems) {
             buffer_wpos = 0;
@@ -329,7 +340,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
         }
         if (whole_reconstruction and not autocrop and data != NULL) { // If needed, we compute the error statistics
             datanorm += data[i] * data[i];
-            sse += (data[i] - c[i]) * (data[i] - c[i]);
+            sse += (data[i] - remapped) * (data[i] - remapped);
             datamin = min(datamin, data[i]);
             datamax = max(datamax, data[i]);
         }
