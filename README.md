@@ -53,7 +53,7 @@ The target accuracy can be specified either as **relative error** (```-e```), **
 
 "Isotropic fine" turbulence timestep (512x512x512, 32-bit float) from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
 
-[<img src="https://github.com/rballester/tthresh/blob/master/images/channel.png" width="1024" title="Channel">](https://github.com/rballester/tthresh/raw/master/images/channel.png)
+[<img src="https://github.com/rballester/tthresh/blob/master/images/isotropic_fine.png" width="1024" title="Isotropic fine">](https://github.com/rballester/tthresh/raw/master/images/isotropic_fine.png)
 
 "Foot" (256x256x256, 8-bit unsigned int) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
 
