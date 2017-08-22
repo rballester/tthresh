@@ -3,7 +3,7 @@
  *                          (Visualization and MultiMedia Lab, University of Zurich),
  *                          rballester@ifi.uzh.ch
  *
- * Licensed under LGPLv3.0 (https://github.com/rballester/tthresh/LICENSE)
+ * Licensed under the LGPLv3.0 (https://github.com/rballester/tthresh/blob/master/LICENSE)
  */
 
 #ifndef __TUCKER_HPP__

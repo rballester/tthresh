@@ -2,7 +2,7 @@
 
 ## Multidimensional Compression Using the Tucker Tensor Decomposition
 
-This is an improved **C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) ([rballester@ifi.uzh.ch](rballester@ifi.uzh.ch)) evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html):
+This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) evolved from the thresholding compression method for 3D grid data described in the paper [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html):
 
 ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
 
@@ -67,13 +67,13 @@ The target accuracy can be specified either as relative error (```-e```), RMSE (
 
 To get more info on the available options, run ```tthresh -h```.
 
-### Acknowledgment
+### Acknowledgments
 
-Special thanks to [Peter G. Lindstrom](http://people.llnl.gov/pl), author of the [zfp and fpzip compressors](http://computation.llnl.gov/projects/floating-point-compression), for sparking fruitful discussions and ideas on how to improve the Tucker compressor. Thanks also to [Enrique G. Paredes](http://www.ifi.uzh.ch/en/vmml/people/current-staff/egparedes.html) for his help with CMake compilation issues.
+Special thanks to [Peter G Lindstrom](http://people.llnl.gov/pl), author of the [zfp and fpzip compressors](http://computation.llnl.gov/projects/floating-point-compression), for sparking fruitful discussions and ideas on how to improve the Tucker compressor. Thanks also to [Enrique G. Paredes](http://www.ifi.uzh.ch/en/vmml/people/current-staff/egparedes.html) for his help with CMake compilation issues.
 
 ### Why Tucker?
 
-Tensor-based compression is **non-local**, in the sense that all compressed coefficients contribute to the transformation of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data at **all spatial scales**, which has several advantages:
+Tensor-based compression is non-local, in the sense that all compressed coefficients contribute to the transformation of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data at all spatial scales, which has several advantages:
 
 - Very competitive **compression quality**
 - Fine bit-rate **granularity**
