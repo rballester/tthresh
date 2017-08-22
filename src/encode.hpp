@@ -1,9 +1,18 @@
+/*
+ * Copyright (c) 2016-2017, Rafael Ballester-Ripoll
+ *                          (Visualization and MultiMedia Lab, University of Zurich),
+ *                          rballester@ifi.uzh.ch
+ *
+ * Licensed under LGPLv3.0 (https://github.com/rballester/tthresh/LICENSE)
+ */
+
+/* Parts of this code were taken from https://rosettacode.org/wiki/Huffman_coding
+ (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
+ which is a C++ Huffman encoding implementation.
+*/
+
 #ifndef __ENCODE_HPP__
 #define __ENCODE_HPP__
-
-// Parts of this code were taken from https://rosettacode.org/wiki/Huffman_coding
-// (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
-// which is a C++ Huffman encoding implementation.
 
 #include <iostream>
 #include <fstream>

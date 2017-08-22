@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2016-2017, Rafael Ballester-Ripoll
+ *                          (Visualization and MultiMedia Lab, University of Zurich),
+ *                          rballester@ifi.uzh.ch
+ *
+ * Licensed under LGPLv3.0 (https://github.com/rballester/tthresh/LICENSE)
+ */
+
 #include <iostream>
 #include <string>
 #include <iomanip>

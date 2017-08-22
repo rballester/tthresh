@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2016-2017, Rafael Ballester-Ripoll
+ *                          (Visualization and MultiMedia Lab, University of Zurich),
+ *                          rballester@ifi.uzh.ch
+ *
+ * Licensed under LGPLv3.0 (https://github.com/rballester/tthresh/LICENSE)
+ */
+
 #ifndef __COMPRESS_HPP__
 #define __COMPRESS_HPP__
 
@@ -41,14 +49,14 @@ void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
         for (uint32_t i = 0; i < U.rows(); ++i) {
             uint8_t q = U_q[j];
             if (q > 0) {
-                q = min(63, q + 2);	// A good compromise
+                q = min(63, q + 2); // A good compromise
                 uint64_t to_write;
                 if (q == 63)
                     to_write = *reinterpret_cast<uint64_t*>(&U(i,j));
                 else {
                     to_write = min(((1UL << q) - 1), (uint64_t) roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
                     if (U(i, j) < 0)
-                        to_write |=  1UL << q;// The sign is the most significant bit
+                        to_write |=  1UL << q; // The sign is the most significant bit
                 }
                 zlib_write_bits(to_write, q+1);
             }
