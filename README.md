@@ -61,9 +61,9 @@ The target accuracy can be specified either as relative error (```-e```), RMSE (
 
 ### Extra Features
 
-- Use ```-a``` to reconstruct only the data's bounding box.
+- Use ```-a``` to reconstruct only the data set's bounding box.
 - Use ```-k``` when compressing a file to skip its k leading bytes.
-- Use [NumPy-like notation](https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.indexing.html#basic-slicing-and-indexing) immediately after ```-o``` to decompress and/or decimate the data set. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform [Lanczos downsampling](https://en.wikipedia.org/wiki/Lanczos_resampling) by a factor of 4. Some result examples for x2 decimation:
+- Use [NumPy-like notation](https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.indexing.html#basic-slicing-and-indexing) immediately after ```-o``` to decimate the data while decompression. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform [Lanczos downsampling](https://en.wikipedia.org/wiki/Lanczos_resampling) by a factor of 4. Some result examples for x2 decimation:
 
 [<img src="https://github.com/rballester/tthresh/blob/master/images/decimation.png" width="512" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/decimation.png)
 
@@ -75,7 +75,7 @@ Special thanks to [Peter G Lindstrom](http://people.llnl.gov/pl), author of the 
 
 ### Why Tucker?
 
-Tensor-based compression is non-local, in the sense that all compressed coefficients contribute to the transformation of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data at all spatial scales, which has several advantages:
+Tensor-based compression is non-local, in the sense that all compressed coefficients contribute to the reconstruction of each individual voxel (in contrast to e.g. wavelet transforms or JPEG for images, which uses a localized DCT transform). This can be computationally demanding but decorrelates the data at all spatial scales, which has several advantages:
 
 - Very competitive **compression quality**
 - Fine bit-rate **granularity**
