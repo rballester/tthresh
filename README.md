@@ -18,7 +18,7 @@ git clone https://github.com/rballester/tthresh.git
 
 ### Compilation
 
-Use CMake to generate an executable ```tthresh```:
+Use [CMake](https://cmake.org/) to generate an executable ```tthresh```:
 
 ```
 mkdir build
@@ -63,7 +63,7 @@ The target accuracy can be specified either as relative error (```-e```), RMSE (
 
 - Use ```-a``` to reconstruct only the data's bounding box.
 - Use ```-k``` when compressing a file to skip its k leading bytes.
-- Use NumPy notation immediately after ```-o``` to decompress and/or decimate the data set. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform Lanczos downsampling by a factor of 4. Some result examples:
+- Use [NumPy-like notation](https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.indexing.html#basic-slicing-and-indexing) immediately after ```-o``` to decompress and/or decimate the data set. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform [Lanczos downsampling](https://en.wikipedia.org/wiki/Lanczos_resampling) by a factor of 4. Some result examples for x2 decimation:
 
 [<img src="https://github.com/rballester/tthresh/blob/master/images/decimation.png" width="512" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/decimation.png)
 
