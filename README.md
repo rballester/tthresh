@@ -61,9 +61,11 @@ The target accuracy can be specified either as relative error (```-e```), RMSE (
 
 ### Extra Features
 
-- Use NumPy notation immediately after ```-o``` to decompress and/or decimate the data set. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform Lanczos downsampling by a factor of 4.
 - Use ```-a``` to reconstruct only the data's bounding box.
 - Use ```-k``` when compressing a file to skip its k leading bytes.
+- Use NumPy notation immediately after ```-o``` to decompress and/or decimate the data set. For example, ```-o :: :: 0``` will reconstruct only the first z-slice of a volume, ```-o ::2 ::2 ::2``` will decompress only every other voxel along all dimensions, and ```-o ll4 ll4 ll4``` will perform Lanczos downsampling by a factor of 4. Some result examples:
+
+[<img src="https://github.com/rballester/tthresh/blob/master/images/decimation.png" width="512" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/decimation.png)
 
 To get more info on the available options, run ```tthresh -h```.
 
