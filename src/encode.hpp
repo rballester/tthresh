@@ -6,154 +6,94 @@
  * Licensed under the LGPLv3.0 (https://github.com/rballester/tthresh/blob/master/LICENSE)
  */
 
-/* Parts of this code were taken from https://rosettacode.org/wiki/Huffman_coding
- (released under the GNU Free Documentation License 1.2, http://www.gnu.org/licenses/fdl-1.2.html)
- which is a C++ Huffman encoding implementation.
+/*
+ The arithmetic loop (last part of this function) was provided by
+http://marknelson.us/2014/10/19/data-compression-with-arithmetic-coding
+under the following MIT License:
+
+Copyright (c) 2014 Mark Thomas Nelson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 */
 
 #ifndef __ENCODE_HPP__
 #define __ENCODE_HPP__
 
-#include <iostream>
-#include <fstream>
-#include <queue>
 #include <map>
 #include <iterator>
-#include <algorithm>
-#include <cstring>
 #include "zlib_io.hpp"
 
 using namespace std;
 
-typedef std::vector<bool> HuffCode;
-typedef std::map<size_t, uint64_t> HuffCodeMap;
+uint8_t CODE_VALUE_BITS = 32;
+uint64_t MAX_CODE = (1UL<<CODE_VALUE_BITS)-1;
+uint64_t ONE_FOURTH = (MAX_CODE+1UL)/4;
+uint64_t ONE_HALF = ONE_FOURTH*2;
+uint64_t THREE_FOURTHS = ONE_FOURTH*3;
 
-class INode {
-public:
-    const size_t
-    f;
+uint64_t encoding_bits;
 
-    virtual ~ INode() {
-    } protected:
-    INode(size_t f):f(f) {
-    }
-};
-
-class InternalNode:public INode {
-public:
-    INode * const
-    left;
-    INode *const
-    right;
-
-    InternalNode(INode * c0, INode * c1):INode(c0->f + c1->f), left(c0), right(c1) {
-    } ~InternalNode() {
-        delete left;
-        delete right;
-    }
-};
-
-class LeafNode:public INode {
-public:
-    const size_t
-    c;
-
-    LeafNode(size_t f, size_t c):INode(f), c(c) {
-    }};
-
-struct NodeCmp {
-    bool operator  () (const INode * lhs, const INode * rhs) const {
-        return lhs->f > rhs->f;
-    }};
-
-INode *BuildTree(std::map < size_t, uint32_t >&frequencies)
-{
-    std::priority_queue < INode *, std::vector < INode * >, NodeCmp > trees;
-
-    for (std::map<size_t, uint32_t>::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
-        trees.push(new LeafNode(it->second, (uint32_t) it->first));
-    }
-    while (trees.size() > 1) {
-        INode *childR = trees.top();
-        trees.pop();
-
-        INode *childL = trees.top();
-        trees.pop();
-
-        INode *parent = new InternalNode(childR, childL);
-        trees.push(parent);
-    }
-    return trees.top();
+inline void put_bit(char bit) {
+    zlib_write_bits(bit, 1);
+    encoding_bits++;
 }
 
-void GenerateCodes(const INode * node, const HuffCode & prefix, HuffCodeMap & outCodes, std::map<size_t, uint8_t>& code_lens)
+inline void put_bit_plus_pending(bool bit, int& pending_bits)
 {
-    if (const LeafNode * lf = dynamic_cast < const LeafNode * >(node)) {
-        uint64_t binary = 0;
-        if (prefix.size() > sizeof(binary)*8) {
-            cout << "Error: encoding too large" << endl;
-            exit(1);
-        }
-        for (int i = prefix.size()-1; i >= 0; --i)
-            binary |= prefix[prefix.size()-1-i] << i;
-        outCodes[lf->c] = binary;
-        code_lens[lf->c] = prefix.size();
-    } else if (const InternalNode * in = dynamic_cast < const InternalNode * >(node)) {
-        HuffCode leftPrefix = prefix;
-        leftPrefix.push_back(false);
-        GenerateCodes(in->left, leftPrefix, outCodes, code_lens);
-
-        HuffCode rightPrefix = prefix;
-        rightPrefix.push_back(true);
-        GenerateCodes(in->right, rightPrefix, outCodes, code_lens);
-    }
+  put_bit(bit);
+  for ( int i = 0 ; i < pending_bits ; i++ )
+    put_bit(!bit);
+  pending_bits = 0;
 }
 
-size_t encode(vector<size_t>& rle) {
+uint64_t encode(vector<uint64_t>& rle) {
 
-    std::map<size_t, uint8_t> code_lens;
-    std::map<size_t, uint32_t> frequencies;
-    for (size_t i = 0; i < rle.size(); ++i)
-        ++frequencies[rle[i]];
-
-    /*******************************/
-    // Create the Huffman dictionary
-    /*******************************/
-
-    INode *root = BuildTree(frequencies);
-
-    HuffCodeMap codes;
-    GenerateCodes(root, HuffCode(), codes, code_lens);
-    delete root;
-
-    if (frequencies.size() == 1) { // If there's only one symbol, we still need one bit for it
-        codes[frequencies.begin()->first] = 0;
-        code_lens[frequencies.begin()->first] = 1;
+    // Build table of frequencies/probability intervals
+    // key -> (count, lower bound)
+    std::map<uint64_t, pair<uint64_t, uint64_t> > frequencies;
+    for (uint64_t i = 0; i < rle.size(); ++i)
+        ++frequencies[rle[i]].first;
+    uint64_t count = 0;
+    for (std::map<uint64_t, pair<uint64_t, uint64_t> >::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
+        (it->second).second = count;
+        count += (it->second).first;
     }
 
-    /**************************************************************************/
-    // Save the dictionary + encoding information:
-    // (1) Number of key/code pairs (uint32_t)
-    // (2) For each key/code pair:
-    //         length(key) (uint8_t)
-    //         key (sequence of bits)
-    //         length(code) (uint8_t)
-    //         code (sequence of bits)
-    // (3) Number N of keys to code (uint64_t)
-    // (4) N codes (sequence of bits)
-    /**************************************************************************/
+    encoding_bits = 0;
 
     zlib_open_wbit();
 
-    // Number of key/code pairs
-    uint32_t dict_size = codes.size();
-    zlib_write_bits(dict_size, sizeof(int)*8);
+    //*********
+    //********* Write frequencies
+    //*********
+
+    // Number of key/frequency pairs
+    uint64_t dict_size = frequencies.size();
+    zlib_write_bits(dict_size, sizeof(uint64_t)*8);
+//    cerr << "dict_size: " << dict_size << endl;
+    encoding_bits += sizeof(uint64_t)*8;
 
     // Key/code pairs
-    size_t hbits = 0;
-    for (HuffCodeMap::const_iterator it = codes.begin(); it != codes.end(); ++it) {
+    for (std::map<uint64_t, pair<uint64_t, uint64_t> >::iterator it = frequencies.begin(); it != frequencies.end(); ++it) {
 
-        uint64_t key = it->first; // TODO change key to ind_t
+        uint64_t key = it->first;
+        uint64_t freq = (it->second).first;
 
         // First, the key's length
         uint8_t key_len = 0;
@@ -168,25 +108,80 @@ size_t encode(vector<size_t>& rle) {
         // Next, the key itself
         zlib_write_bits(key, key_len);
 
-        // Now, the code's length
-        zlib_write_bits(code_lens[key], 6);
+        // Now, the frequency's length
+        uint8_t freq_len = 0;
+        uint64_t freq_copy = freq;
+        while (freq_copy) {
+            freq_copy >>= 1;
+            freq_len++;
+        }
+        freq_len = max(1, freq_len); // A 0 still requires 1 bit for us
+        zlib_write_bits(freq_len, 6);
 
-        // Finally, the code itself
-        zlib_write_bits(it->second, code_lens[key]);
+        // Finally, the frequency itself
+        zlib_write_bits(freq, freq_len);
 
-        hbits += 6 + key_len + 6 + code_lens[key] + code_lens[key]*frequencies[key];
+        encoding_bits += 6 + key_len + 6 + freq_len;
     }
 
     // Number N of symbols to code
     uint64_t n_symbols = rle.size();
-    zlib_write_bits(n_symbols, sizeof(n_symbols)*8);
+    zlib_write_bits(n_symbols, sizeof(uint64_t)*8);
+    encoding_bits += sizeof(uint64_t)*8;
 
-    // Now the N codes
-    for (size_t i = 0; i < rle.size(); ++i)
-        zlib_write_bits(codes[rle[i]], code_lens[rle[i]]);
+    //*********
+    //********* Write the encoding
+    //*********
+
+    int pending_bits = 0;
+    uint64_t low = 0;
+    uint64_t high = MAX_CODE;
+
+    uint64_t rle_pos = 0;
+    for ( ; ; ) {
+      uint64_t c = rle[rle_pos];
+      rle_pos++;
+
+      uint64_t phigh = frequencies[c].second + frequencies[c].first;
+      uint64_t plow = frequencies[c].second;
+
+      uint64_t range = high - low + 1;
+      high = low + (range * phigh / n_symbols) - 1;
+      low = low + (range * plow / n_symbols);
+
+      for ( ; ; ) {
+        if ( high < ONE_HALF )
+          put_bit_plus_pending(0, pending_bits);
+        else if ( low >= ONE_HALF )
+          put_bit_plus_pending(1, pending_bits);
+        else if ( low >= ONE_FOURTH && high < THREE_FOURTHS ) {
+          pending_bits++;
+          low -= ONE_FOURTH;
+          high -= ONE_FOURTH;
+        } else
+          break;
+        high <<= 1;
+        high++;
+        low <<= 1;
+        high &= MAX_CODE;
+        low &= MAX_CODE;
+      }
+
+      if (rle_pos == n_symbols)
+        break;
+    }
+    pending_bits++;
+    if ( low < ONE_FOURTH )
+      put_bit_plus_pending(0, pending_bits);
+    else
+      put_bit_plus_pending(1, pending_bits);
+
+    zlib_write_bits(0UL, CODE_VALUE_BITS-2); // Trailing zeros
+    encoding_bits += CODE_VALUE_BITS-2;
 
     zlib_close_wbit();
-    return hbits;
+
+    return encoding_bits;
 }
 
 #endif // ENCODE_HPP

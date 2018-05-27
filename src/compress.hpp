@@ -223,7 +223,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
 
     if (verbose)
         start_timer("Sorting core's absolute values... ");
-    vector< pair<double,size_t> > sorting(size);
+    vector< pair<double, size_t> > sorting(size);
     for (size_t i = 0; i < size; ++i)
         sorting[i] = pair < double, size_t >(abs(c[i]), i);
     sort(sorting.begin(), sorting.end());

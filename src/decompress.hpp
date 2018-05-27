@@ -117,6 +117,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     jumps[0] = size+1;
     if (verbose)
         start_timer("Decoding chunks...\n");
+
     while(assigned < size) {
         double chunk_min;
         zlib_read_stream(reinterpret_cast<uint8_t*> (&chunk_min), sizeof(chunk_min));
@@ -124,7 +125,6 @@ void decompress(string compressed_file, string output_file, double *data, vector
         double chunk_max;
         zlib_read_stream(reinterpret_cast<uint8_t*> (&chunk_max), sizeof(chunk_max));
         maximums.push_back(chunk_max);
-
         // At each step, we integrate a new mask. Each mask indexes only over the "zeros" of the previous mask
         // The new mask always comes in RLE form
         // The current mask is described by the "jumps" array: jumps[0] is the first RLE counter.
