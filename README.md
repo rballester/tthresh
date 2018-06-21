@@ -2,14 +2,24 @@
 
 ## Multidimensional Compression Using the Tucker Tensor Decomposition
 
-This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the algorithm developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data](https://arxiv.org/pdf/1806.05952.pdf).
+This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**. It leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions, together with adaptive quantization, run-length and arithmetic coding to store the HOSVD transform coefficients' relative positions as sorted by their absolute magnitude.
 
-This compressor is intended for Cartesian grid data of **3 dimensions and above**. If you use it for a scientific publication, please cite one or both of these papers:
+If you use TTHRESH for a scientific publication, please cite one or both of these papers:
 
-- [*TTHRESH: Tensor Compression for Multidimensional Visual Data*](https://arxiv.org/abs/1806.05952): ```@article{BLP:18, author = {{Ballester-Ripoll}, R. and {Lindstrom}, P. and {Pajarola}, R.}, title = "{TTHRESH: Tensor Compression for Multidimensional Visual Data}", journal = {ArXiv e-prints}, archivePrefix = "arXiv", eprint = {1806.05952}, primaryClass = "cs.GR", keywords = {Computer Science - Graphics}, year = 2018, month = jun, url = {https://arxiv.org/abs/1806.05952}}```
+- [*TTHRESH: Tensor Compression for Multidimensional Visual Data*](https://arxiv.org/abs/1806.05952): ```@article{BLP:18, author = {{Ballester-Ripoll}, R. and {Lindstrom}, P. and {Pajarola}, R.}, title = "{{TTHRESH}: Tensor Compression for Multidimensional Visual Data}", journal = {ArXiv e-prints}, archivePrefix = "arXiv", eprint = {1806.05952}, primaryClass = "cs.GR", keywords = {Computer Science - Graphics}, year = 2018, month = jun, url = {https://arxiv.org/abs/1806.05952}}```
 - [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html): ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
 
-For more details on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
+For more information on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
+
+### Visual Results (click to enlarge)
+
+"Isotropic fine" turbulence timestep (512x512x512, 32-bit float) from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
+
+[<img src="https://github.com/rballester/tthresh/blob/master/images/isotropic_fine.png" width="1024" title="Isotropic fine">](https://github.com/rballester/tthresh/raw/master/images/isotropic_fine.png)
+
+"Foot" (256x256x256, 8-bit unsigned int) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
+
+[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1024" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/foot.png)
 
 ### Download
 
@@ -51,16 +61,6 @@ tthresh -i dataset <options> -c <compressed dataset> -o <decompressed dataset>
 ```
 
 The target accuracy can be specified either as relative error (```-e```), RMSE (```-r```) or PSNR (```-p```).
-
-### Visual Results (click to enlarge)
-
-"Isotropic fine" turbulence timestep (512x512x512, 32-bit float) from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
-
-[<img src="https://github.com/rballester/tthresh/blob/master/images/isotropic_fine.png" width="1024" title="Isotropic fine">](https://github.com/rballester/tthresh/raw/master/images/isotropic_fine.png)
-
-"Foot" (256x256x256, 8-bit unsigned int) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
-
-[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1024" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/foot.png)
 
 ### Extra Features
 
