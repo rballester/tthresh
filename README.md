@@ -2,7 +2,7 @@
 
 ## Multidimensional Compression Using the Tucker Tensor Decomposition
 
-This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**. It leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions, together with adaptive quantization, run-length and arithmetic coding to store the HOSVD transform coefficients' relative positions as sorted by their absolute magnitude.
+This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data (R. Ballester-Ripoll, P. Lindstrom and R. Pajarola)](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**. It leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions, together with adaptive quantization, run-length and arithmetic coding to store the HOSVD transform coefficients' relative positions as sorted by their absolute magnitude.
 
 If you use TTHRESH for a scientific publication, please cite one or both of these papers:
 
@@ -74,9 +74,7 @@ To get more info on the available options, run ```tthresh -h```.
 
 ### Acknowledgments
 
-This work was partially supported by the [UZH Forschungskredit "Candoc"](http://www.researchers.uzh.ch/en/funding/phd/fkcandoc.html), grant number FK-16-012.
-
-Special thanks to [Peter G Lindstrom](http://people.llnl.gov/pl), author of the [zfp and fpzip compressors](http://computation.llnl.gov/projects/floating-point-compression), for sparking fruitful discussions and ideas on how to improve the Tucker compressor. Thanks also to [Enrique G. Paredes](http://www.ifi.uzh.ch/en/vmml/people/current-staff/egparedes.html) for his help with CMake compilation issues.
+This work was partially supported by the [UZH Forschungskredit "Candoc"](http://www.researchers.uzh.ch/en/funding/phd/fkcandoc.html), grant number FK-16-012. I also thank [Enrique G. Paredes](http://www.ifi.uzh.ch/en/vmml/people/current-staff/egparedes.html) for his help with CMake compilation issues.
 
 ### Why Tucker?
 
