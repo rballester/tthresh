@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
         if (not sizes_flag or target_value < 0)
             display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
         if (s.size() < 3)
-            display_error("Specify 3 or more integer sizes after -s");
+            display_error("Specify 3 or more integer sizes after -s (C memory order)");
     }
     else if (skip_bytes_flag)
         display_error("Flag -k needs -i");

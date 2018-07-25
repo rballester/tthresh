@@ -87,7 +87,7 @@ void print_usage() {
     cout << "Compression parameters (needed with -i):" << endl;
     cout << endl;
     cout << "\t-t <type>                 - Input type (can be \"uchar\", \"ushort\", \"int\", \"float\" or \"double\")" << endl;
-    cout << "\t-s <x> <y> <z> [...]      - Data sizes (3 or more integers)" << endl;
+    cout << "\t-s <x> <y> <z> [...]      - Data sizes (3 or more integers); assumed to be in C order (last dimension is the fastest-changing one)" << endl;
     cout << "\t-e | -r | -p <target>     - Target accuracy (real); relative error, RMSE or PSNR, respectively" << endl;
     cout << endl;
 
