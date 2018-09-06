@@ -62,6 +62,14 @@ tthresh -i dataset <options> -c <compressed dataset> -o <decompressed dataset>
 
 The target accuracy can be specified either as relative error (```-e```), RMSE (```-r```) or PSNR (```-p```).
 
+**Toy example**:
+
+A toy data set (a 3D sphere) is included in the ```data/``` folder. You can test the compressor with it as follows:
+
+```
+tthresh -i data/3D_sphere_64_uchar.raw -t uchar -s 64 64 64 -p 30 -c data/comp.raw -o data/decomp.raw
+```
+
 ### Extra Features
 
 - Use ```-a``` to reconstruct only the data set's bounding box.
