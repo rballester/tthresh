@@ -817,73 +817,79 @@ struct mapbase_evaluator : evaluator_base<Derived>
     ColsAtCompileTime = XprType::ColsAtCompileTime,
     CoeffReadCost = NumTraits<Scalar>::ReadCost
   };
-  
+
   EIGEN_DEVICE_FUNC explicit mapbase_evaluator(const XprType& map)
-    : m_data(const_cast<PointerType>(map.data())),  
-      m_xpr(map)
+    : m_data(const_cast<PointerType>(map.data())),
+      m_innerStride(map.innerStride()),
+      m_outerStride(map.outerStride())
   {
     EIGEN_STATIC_ASSERT(EIGEN_IMPLIES(evaluator<Derived>::Flags&PacketAccessBit, internal::inner_stride_at_compile_time<Derived>::ret==1),
                         PACKET_ACCESS_REQUIRES_TO_HAVE_INNER_STRIDE_FIXED_TO_1);
     EIGEN_INTERNAL_CHECK_COST_VALUE(CoeffReadCost);
   }
- 
+
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   CoeffReturnType coeff(Index row, Index col) const
   {
-    return m_data[col * m_xpr.colStride() + row * m_xpr.rowStride()];
+    return m_data[col * colStride() + row * rowStride()];
   }
-  
+
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   CoeffReturnType coeff(Index index) const
   {
-    return m_data[index * m_xpr.innerStride()];
+    return m_data[index * m_innerStride.value()];
   }
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   Scalar& coeffRef(Index row, Index col)
   {
-    return m_data[col * m_xpr.colStride() + row * m_xpr.rowStride()];
+    return m_data[col * colStride() + row * rowStride()];
   }
-  
+
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   Scalar& coeffRef(Index index)
   {
-    return m_data[index * m_xpr.innerStride()];
+    return m_data[index * m_innerStride.value()];
   }
- 
+
   template<int LoadMode, typename PacketType>
   EIGEN_STRONG_INLINE
-  PacketType packet(Index row, Index col) const 
+  PacketType packet(Index row, Index col) const
   {
-    PointerType ptr = m_data + row * m_xpr.rowStride() + col * m_xpr.colStride();
+    PointerType ptr = m_data + row * rowStride() + col * colStride();
     return internal::ploadt<PacketType, LoadMode>(ptr);
   }
 
   template<int LoadMode, typename PacketType>
   EIGEN_STRONG_INLINE
-  PacketType packet(Index index) const 
+  PacketType packet(Index index) const
   {
-    return internal::ploadt<PacketType, LoadMode>(m_data + index * m_xpr.innerStride());
+    return internal::ploadt<PacketType, LoadMode>(m_data + index * m_innerStride.value());
   }
-  
+
   template<int StoreMode, typename PacketType>
   EIGEN_STRONG_INLINE
-  void writePacket(Index row, Index col, const PacketType& x) 
+  void writePacket(Index row, Index col, const PacketType& x)
   {
-    PointerType ptr = m_data + row * m_xpr.rowStride() + col * m_xpr.colStride();
+    PointerType ptr = m_data + row * rowStride() + col * colStride();
     return internal::pstoret<Scalar, PacketType, StoreMode>(ptr, x);
   }
-  
+
   template<int StoreMode, typename PacketType>
   EIGEN_STRONG_INLINE
-  void writePacket(Index index, const PacketType& x) 
+  void writePacket(Index index, const PacketType& x)
   {
-    internal::pstoret<Scalar, PacketType, StoreMode>(m_data + index * m_xpr.innerStride(), x);
+    internal::pstoret<Scalar, PacketType, StoreMode>(m_data + index * m_innerStride.value(), x);
   }
- 
 protected:
+  EIGEN_DEVICE_FUNC
+  inline Index rowStride() const { return XprType::IsRowMajor ? m_outerStride.value() : m_innerStride.value(); }
+  EIGEN_DEVICE_FUNC
+  inline Index colStride() const { return XprType::IsRowMajor ? m_innerStride.value() : m_outerStride.value(); }
+
   PointerType m_data;
-  const XprType& m_xpr;
+  const internal::variable_if_dynamic<Index, XprType::InnerStrideAtCompileTime> m_innerStride;
+  const internal::variable_if_dynamic<Index, XprType::OuterStrideAtCompileTime> m_outerStride;
 };
 
 template<typename PlainObjectType, int MapOptions, typename StrideType> 
@@ -971,7 +977,7 @@ struct evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel> >
     OuterStrideAtCompileTime = HasSameStorageOrderAsArgType
                              ? int(outer_stride_at_compile_time<ArgType>::ret)
                              : int(inner_stride_at_compile_time<ArgType>::ret),
-    MaskPacketAccessBit = (InnerStrideAtCompileTime == 1) ? PacketAccessBit : 0,
+    MaskPacketAccessBit = (InnerStrideAtCompileTime == 1 || HasSameStorageOrderAsArgType) ? PacketAccessBit : 0,
     
     FlagsLinearAccessBit = (RowsAtCompileTime == 1 || ColsAtCompileTime == 1 || (InnerPanel && (evaluator<ArgType>::Flags&LinearAccessBit))) ? LinearAccessBit : 0,    
     FlagsRowMajorBit = XprType::Flags&RowMajorBit,
@@ -981,7 +987,9 @@ struct evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel> >
     Flags = Flags0 | FlagsLinearAccessBit | FlagsRowMajorBit,
     
     PacketAlignment = unpacket_traits<PacketScalar>::alignment,
-    Alignment0 = (InnerPanel && (OuterStrideAtCompileTime!=Dynamic) && (((OuterStrideAtCompileTime * int(sizeof(Scalar))) % int(PacketAlignment)) == 0)) ? int(PacketAlignment) : 0,
+    Alignment0 = (InnerPanel && (OuterStrideAtCompileTime!=Dynamic)
+                             && (OuterStrideAtCompileTime!=0)
+                             && (((OuterStrideAtCompileTime * int(sizeof(Scalar))) % int(PacketAlignment)) == 0)) ? int(PacketAlignment) : 0,
     Alignment = EIGEN_PLAIN_ENUM_MIN(evaluator<ArgType>::Alignment, Alignment0)
   };
   typedef block_evaluator<ArgType, BlockRows, BlockCols, InnerPanel> block_evaluator_type;
@@ -1012,14 +1020,16 @@ struct unary_evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel>, IndexBa
   EIGEN_DEVICE_FUNC explicit unary_evaluator(const XprType& block)
     : m_argImpl(block.nestedExpression()), 
       m_startRow(block.startRow()), 
-      m_startCol(block.startCol()) 
+      m_startCol(block.startCol()),
+      m_linear_offset(InnerPanel?(XprType::IsRowMajor ? block.startRow()*block.cols() : block.startCol()*block.rows()):0)
   { }
  
   typedef typename XprType::Scalar Scalar;
   typedef typename XprType::CoeffReturnType CoeffReturnType;
 
   enum {
-    RowsAtCompileTime = XprType::RowsAtCompileTime
+    RowsAtCompileTime = XprType::RowsAtCompileTime,
+    ForwardLinearAccess = InnerPanel && bool(evaluator<ArgType>::Flags&LinearAccessBit)
   };
  
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
@@ -1031,7 +1041,10 @@ struct unary_evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel>, IndexBa
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   CoeffReturnType coeff(Index index) const
   { 
-    return coeff(RowsAtCompileTime == 1 ? 0 : index, RowsAtCompileTime == 1 ? index : 0);
+    if (ForwardLinearAccess)
+      return m_argImpl.coeff(m_linear_offset.value() + index); 
+    else
+      return coeff(RowsAtCompileTime == 1 ? 0 : index, RowsAtCompileTime == 1 ? index : 0);
   }
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
@@ -1043,7 +1056,10 @@ struct unary_evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel>, IndexBa
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   Scalar& coeffRef(Index index)
   { 
-    return coeffRef(RowsAtCompileTime == 1 ? 0 : index, RowsAtCompileTime == 1 ? index : 0);
+    if (ForwardLinearAccess)
+      return m_argImpl.coeffRef(m_linear_offset.value() + index); 
+    else
+      return coeffRef(RowsAtCompileTime == 1 ? 0 : index, RowsAtCompileTime == 1 ? index : 0);
   }
  
   template<int LoadMode, typename PacketType>
@@ -1057,8 +1073,11 @@ struct unary_evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel>, IndexBa
   EIGEN_STRONG_INLINE
   PacketType packet(Index index) const 
   { 
-    return packet<LoadMode,PacketType>(RowsAtCompileTime == 1 ? 0 : index,
-                                       RowsAtCompileTime == 1 ? index : 0);
+    if (ForwardLinearAccess)
+      return m_argImpl.template packet<LoadMode,PacketType>(m_linear_offset.value() + index);
+    else
+      return packet<LoadMode,PacketType>(RowsAtCompileTime == 1 ? 0 : index,
+                                         RowsAtCompileTime == 1 ? index : 0);
   }
   
   template<int StoreMode, typename PacketType>
@@ -1072,15 +1091,19 @@ struct unary_evaluator<Block<ArgType, BlockRows, BlockCols, InnerPanel>, IndexBa
   EIGEN_STRONG_INLINE
   void writePacket(Index index, const PacketType& x) 
   {
-    return writePacket<StoreMode,PacketType>(RowsAtCompileTime == 1 ? 0 : index,
-                                             RowsAtCompileTime == 1 ? index : 0,
-                                             x);
+    if (ForwardLinearAccess)
+      return m_argImpl.template writePacket<StoreMode,PacketType>(m_linear_offset.value() + index, x);
+    else
+      return writePacket<StoreMode,PacketType>(RowsAtCompileTime == 1 ? 0 : index,
+                                              RowsAtCompileTime == 1 ? index : 0,
+                                              x);
   }
  
 protected:
   evaluator<ArgType> m_argImpl;
   const variable_if_dynamic<Index, (ArgType::RowsAtCompileTime == 1 && BlockRows==1) ? 0 : Dynamic> m_startRow;
   const variable_if_dynamic<Index, (ArgType::ColsAtCompileTime == 1 && BlockCols==1) ? 0 : Dynamic> m_startCol;
+  const variable_if_dynamic<Index, InnerPanel ? Dynamic : 0> m_linear_offset;
 };
 
 // TODO: This evaluator does not actually use the child evaluator; 
@@ -1296,7 +1319,7 @@ struct evaluator<PartialReduxExpr<ArgType, MemberOp, Direction> >
   }
 
 protected:
-  const ArgTypeNested m_arg;
+  typename internal::add_const_on_value_type<ArgTypeNested>::type m_arg;
   const MemberOp m_functor;
 };
 
@@ -1550,9 +1573,7 @@ struct evaluator<Diagonal<ArgType, DiagIndex> >
   { }
  
   typedef typename XprType::Scalar Scalar;
-  // FIXME having to check whether ArgType is sparse here i not very nice.
-  typedef typename internal::conditional<!internal::is_same<typename ArgType::StorageKind,Sparse>::value,
-                                         typename XprType::CoeffReturnType,Scalar>::type CoeffReturnType;
+  typedef typename XprType::CoeffReturnType CoeffReturnType;
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
   CoeffReturnType coeff(Index row, Index) const

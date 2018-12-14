@@ -31,7 +31,8 @@ struct dot_nocheck
   typedef scalar_conj_product_op<typename traits<T>::Scalar,typename traits<U>::Scalar> conj_prod;
   typedef typename conj_prod::result_type ResScalar;
   EIGEN_DEVICE_FUNC
-  static inline ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b)
+  EIGEN_STRONG_INLINE
+  static ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b)
   {
     return a.template binaryExpr<conj_prod>(b).sum();
   }
@@ -43,7 +44,8 @@ struct dot_nocheck<T, U, true>
   typedef scalar_conj_product_op<typename traits<T>::Scalar,typename traits<U>::Scalar> conj_prod;
   typedef typename conj_prod::result_type ResScalar;
   EIGEN_DEVICE_FUNC
-  static inline ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b)
+  EIGEN_STRONG_INLINE
+  static ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b)
   {
     return a.transpose().template binaryExpr<conj_prod>(b).sum();
   }
@@ -51,7 +53,8 @@ struct dot_nocheck<T, U, true>
 
 } // end namespace internal
 
-/** \returns the dot product of *this with other.
+/** \fn MatrixBase::dot
+  * \returns the dot product of *this with other.
   *
   * \only_for_vectors
   *
@@ -64,15 +67,18 @@ struct dot_nocheck<T, U, true>
 template<typename Derived>
 template<typename OtherDerived>
 EIGEN_DEVICE_FUNC
+EIGEN_STRONG_INLINE
 typename ScalarBinaryOpTraits<typename internal::traits<Derived>::Scalar,typename internal::traits<OtherDerived>::Scalar>::ReturnType
 MatrixBase<Derived>::dot(const MatrixBase<OtherDerived>& other) const
 {
   EIGEN_STATIC_ASSERT_VECTOR_ONLY(Derived)
   EIGEN_STATIC_ASSERT_VECTOR_ONLY(OtherDerived)
   EIGEN_STATIC_ASSERT_SAME_VECTOR_SIZE(Derived,OtherDerived)
+#if !(defined(EIGEN_NO_STATIC_ASSERT) && defined(EIGEN_NO_DEBUG))
   typedef internal::scalar_conj_product_op<Scalar,typename OtherDerived::Scalar> func;
   EIGEN_CHECK_BINARY_COMPATIBILIY(func,Scalar,typename OtherDerived::Scalar);
-
+#endif
+  
   eigen_assert(size() == other.size());
 
   return internal::dot_nocheck<Derived,OtherDerived>::run(*this, other);
@@ -99,7 +105,7 @@ EIGEN_STRONG_INLINE typename NumTraits<typename internal::traits<Derived>::Scala
   * \sa lpNorm(), dot(), squaredNorm()
   */
 template<typename Derived>
-inline typename NumTraits<typename internal::traits<Derived>::Scalar>::Real MatrixBase<Derived>::norm() const
+EIGEN_STRONG_INLINE typename NumTraits<typename internal::traits<Derived>::Scalar>::Real MatrixBase<Derived>::norm() const
 {
   return numext::sqrt(squaredNorm());
 }
@@ -114,7 +120,7 @@ inline typename NumTraits<typename internal::traits<Derived>::Scalar>::Real Matr
   * \sa norm(), normalize()
   */
 template<typename Derived>
-inline const typename MatrixBase<Derived>::PlainObject
+EIGEN_STRONG_INLINE const typename MatrixBase<Derived>::PlainObject
 MatrixBase<Derived>::normalized() const
 {
   typedef typename internal::nested_eval<Derived,2>::type _Nested;
@@ -136,7 +142,7 @@ MatrixBase<Derived>::normalized() const
   * \sa norm(), normalized()
   */
 template<typename Derived>
-inline void MatrixBase<Derived>::normalize()
+EIGEN_STRONG_INLINE void MatrixBase<Derived>::normalize()
 {
   RealScalar z = squaredNorm();
   // NOTE: after extensive benchmarking, this conditional does not impact performance, at least on recent x86 CPU
@@ -157,7 +163,7 @@ inline void MatrixBase<Derived>::normalize()
   * \sa stableNorm(), stableNormalize(), normalized()
   */
 template<typename Derived>
-inline const typename MatrixBase<Derived>::PlainObject
+EIGEN_STRONG_INLINE const typename MatrixBase<Derived>::PlainObject
 MatrixBase<Derived>::stableNormalized() const
 {
   typedef typename internal::nested_eval<Derived,3>::type _Nested;
@@ -182,7 +188,7 @@ MatrixBase<Derived>::stableNormalized() const
   * \sa stableNorm(), stableNormalized(), normalize()
   */
 template<typename Derived>
-inline void MatrixBase<Derived>::stableNormalize()
+EIGEN_STRONG_INLINE void MatrixBase<Derived>::stableNormalize()
 {
   RealScalar w = cwiseAbs().maxCoeff();
   RealScalar z = (derived()/w).squaredNorm();

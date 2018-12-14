@@ -97,6 +97,19 @@ struct real_default_impl<Scalar,true>
 
 template<typename Scalar> struct real_impl : real_default_impl<Scalar> {};
 
+#ifdef __CUDA_ARCH__
+template<typename T>
+struct real_impl<std::complex<T> >
+{
+  typedef T RealScalar;
+  EIGEN_DEVICE_FUNC
+  static inline T run(const std::complex<T>& x)
+  {
+    return x.real();
+  }
+};
+#endif
+
 template<typename Scalar>
 struct real_retval
 {
@@ -131,6 +144,19 @@ struct imag_default_impl<Scalar,true>
 };
 
 template<typename Scalar> struct imag_impl : imag_default_impl<Scalar> {};
+
+#ifdef __CUDA_ARCH__
+template<typename T>
+struct imag_impl<std::complex<T> >
+{
+  typedef T RealScalar;
+  EIGEN_DEVICE_FUNC
+  static inline T run(const std::complex<T>& x)
+  {
+    return x.imag();
+  }
+};
+#endif
 
 template<typename Scalar>
 struct imag_retval
@@ -322,31 +348,7 @@ struct norm1_retval
 * Implementation of hypot                                                *
 ****************************************************************************/
 
-template<typename Scalar>
-struct hypot_impl
-{
-  typedef typename NumTraits<Scalar>::Real RealScalar;
-  static inline RealScalar run(const Scalar& x, const Scalar& y)
-  {
-    EIGEN_USING_STD_MATH(abs);
-    EIGEN_USING_STD_MATH(sqrt);
-    RealScalar _x = abs(x);
-    RealScalar _y = abs(y);
-    Scalar p, qp;
-    if(_x>_y)
-    {
-      p = _x;
-      qp = _y / p;
-    }
-    else
-    {
-      p = _y;
-      qp = _x / p;
-    }
-    if(p==RealScalar(0)) return RealScalar(0);
-    return p * sqrt(RealScalar(1) + qp*qp);
-  }
-};
+template<typename Scalar> struct hypot_impl;
 
 template<typename Scalar>
 struct hypot_retval
@@ -469,7 +471,7 @@ namespace std_fallback {
     typedef typename NumTraits<Scalar>::Real RealScalar;
     EIGEN_USING_STD_MATH(log);
     Scalar x1p = RealScalar(1) + x;
-    return ( x1p == Scalar(1) ) ? x : x * ( log(x1p) / (x1p - RealScalar(1)) );
+    return numext::equal_strict(x1p, Scalar(1)) ? x : x * ( log(x1p) / (x1p - RealScalar(1)) );
   }
 }
 
@@ -614,21 +616,28 @@ template<typename Scalar>
 struct random_default_impl<Scalar, false, true>
 {
   static inline Scalar run(const Scalar& x, const Scalar& y)
-  { 
-    typedef typename conditional<NumTraits<Scalar>::IsSigned,std::ptrdiff_t,std::size_t>::type ScalarX;
-    if(y<x)
+  {
+    if (y <= x)
       return x;
-    // the following difference might overflow on a 32 bits system,
-    // but since y>=x the result converted to an unsigned long is still correct.
-    std::size_t range = ScalarX(y)-ScalarX(x);
-    std::size_t offset = 0;
-    // rejection sampling
-    std::size_t divisor = 1;
-    std::size_t multiplier = 1;
-    if(range<RAND_MAX) divisor = (std::size_t(RAND_MAX)+1)/(range+1);
-    else               multiplier = 1 + range/(std::size_t(RAND_MAX)+1);
+    // ScalarU is the unsigned counterpart of Scalar, possibly Scalar itself.
+    typedef typename make_unsigned<Scalar>::type ScalarU;
+    // ScalarX is the widest of ScalarU and unsigned int.
+    // We'll deal only with ScalarX and unsigned int below thus avoiding signed
+    // types and arithmetic and signed overflows (which are undefined behavior).
+    typedef typename conditional<(ScalarU(-1) > unsigned(-1)), ScalarU, unsigned>::type ScalarX;
+    // The following difference doesn't overflow, provided our integer types are two's
+    // complement and have the same number of padding bits in signed and unsigned variants.
+    // This is the case in most modern implementations of C++.
+    ScalarX range = ScalarX(y) - ScalarX(x);
+    ScalarX offset = 0;
+    ScalarX divisor = 1;
+    ScalarX multiplier = 1;
+    const unsigned rand_max = RAND_MAX;
+    if (range <= rand_max) divisor = (rand_max + 1) / (range + 1);
+    else                   multiplier = 1 + range / (rand_max + 1);
+    // Rejection sampling.
     do {
-      offset = (std::size_t(std::rand()) * multiplier) / divisor;
+      offset = (unsigned(std::rand()) * multiplier) / divisor;
     } while (offset > range);
     return Scalar(ScalarX(x) + offset);
   }
@@ -1004,7 +1013,8 @@ inline int log2(int x)
 
 /** \returns the square root of \a x.
   *
-  * It is essentially equivalent to \code using std::sqrt; return sqrt(x); \endcode,
+  * It is essentially equivalent to
+  * \code using std::sqrt; return sqrt(x); \endcode
   * but slightly faster for float/double and some compilers (e.g., gcc), thanks to
   * specializations when SSE is enabled.
   *
@@ -1035,10 +1045,23 @@ double log(const double &x) { return ::log(x); }
 
 template<typename T>
 EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE
-typename NumTraits<T>::Real abs(const T &x) {
+typename internal::enable_if<NumTraits<T>::IsSigned || NumTraits<T>::IsComplex,typename NumTraits<T>::Real>::type
+abs(const T &x) {
   EIGEN_USING_STD_MATH(abs);
   return abs(x);
 }
+
+template<typename T>
+EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE
+typename internal::enable_if<!(NumTraits<T>::IsSigned || NumTraits<T>::IsComplex),typename NumTraits<T>::Real>::type
+abs(const T &x) {
+  return x;
+}
+
+#if defined(__SYCL_DEVICE_ONLY__)
+EIGEN_ALWAYS_INLINE float   abs(float x) { return cl::sycl::fabs(x); }
+EIGEN_ALWAYS_INLINE double  abs(double x) { return cl::sycl::fabs(x); }
+#endif // defined(__SYCL_DEVICE_ONLY__)
 
 #ifdef __CUDACC__
 template<> EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE
@@ -1049,12 +1072,12 @@ double abs(const double &x) { return ::fabs(x); }
 
 template <> EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE
 float abs(const std::complex<float>& x) {
-  return ::hypotf(real(x), imag(x));
+  return ::hypotf(x.real(), x.imag());
 }
 
 template <> EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE
 double abs(const std::complex<double>& x) {
-  return ::hypot(real(x), imag(x));
+  return ::hypot(x.real(), x.imag());
 }
 #endif
 
@@ -1312,11 +1335,12 @@ template<typename Scalar>
 struct scalar_fuzzy_default_impl<Scalar, true, false>
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
-  template<typename OtherScalar>
+  template<typename OtherScalar> EIGEN_DEVICE_FUNC
   static inline bool isMuchSmallerThan(const Scalar& x, const OtherScalar& y, const RealScalar& prec)
   {
     return numext::abs2(x) <= numext::abs2(y) * prec * prec;
   }
+  EIGEN_DEVICE_FUNC
   static inline bool isApprox(const Scalar& x, const Scalar& y, const RealScalar& prec)
   {
     return numext::abs2(x - y) <= numext::mini(numext::abs2(x), numext::abs2(y)) * prec * prec;

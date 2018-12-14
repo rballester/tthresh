@@ -98,7 +98,7 @@ template<typename Derived> class MatrixBase
     /** \returns the size of the main diagonal, which is min(rows(),cols()).
       * \sa rows(), cols(), SizeAtCompileTime. */
     EIGEN_DEVICE_FUNC
-    inline Index diagonalSize() const { return (std::min)(rows(),cols()); }
+    inline Index diagonalSize() const { return (numext::mini)(rows(),cols()); }
 
     typedef typename Base::PlainObject PlainObject;
 
@@ -121,6 +121,7 @@ template<typename Derived> class MatrixBase
 #endif // not EIGEN_PARSED_BY_DOXYGEN
 
 #define EIGEN_CURRENT_STORAGE_BASE_CLASS Eigen::MatrixBase
+#define EIGEN_DOC_UNARY_ADDONS(X,Y)
 #   include "../plugins/CommonCwiseUnaryOps.h"
 #   include "../plugins/CommonCwiseBinaryOps.h"
 #   include "../plugins/MatrixCwiseUnaryOps.h"
@@ -129,6 +130,7 @@ template<typename Derived> class MatrixBase
 #     include EIGEN_MATRIXBASE_PLUGIN
 #   endif
 #undef EIGEN_CURRENT_STORAGE_BASE_CLASS
+#undef EIGEN_DOC_UNARY_ADDONS
 
     /** Special case of the template operator=, in order to prevent the compiler
       * from generating a default operator= (issue hit with g++ 4.1)
@@ -158,19 +160,10 @@ template<typename Derived> class MatrixBase
     EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
     Derived& operator-=(const MatrixBase<OtherDerived>& other);
 
-#ifdef __CUDACC__
     template<typename OtherDerived>
     EIGEN_DEVICE_FUNC
-    const Product<Derived,OtherDerived,LazyProduct>
-    operator*(const MatrixBase<OtherDerived> &other) const
-    { return this->lazyProduct(other); }
-#else
-
-    template<typename OtherDerived>
     const Product<Derived,OtherDerived>
     operator*(const MatrixBase<OtherDerived> &other) const;
-
-#endif
 
     template<typename OtherDerived>
     EIGEN_DEVICE_FUNC
@@ -292,7 +285,7 @@ template<typename Derived> class MatrixBase
       *          fuzzy comparison such as isApprox()
       * \sa isApprox(), operator!= */
     template<typename OtherDerived>
-    inline bool operator==(const MatrixBase<OtherDerived>& other) const
+    EIGEN_DEVICE_FUNC inline bool operator==(const MatrixBase<OtherDerived>& other) const
     { return cwiseEqual(other).all(); }
 
     /** \returns true if at least one pair of coefficients of \c *this and \a other are not exactly equal to each other.
@@ -300,7 +293,7 @@ template<typename Derived> class MatrixBase
       *          fuzzy comparison such as isApprox()
       * \sa isApprox(), operator== */
     template<typename OtherDerived>
-    inline bool operator!=(const MatrixBase<OtherDerived>& other) const
+    EIGEN_DEVICE_FUNC inline bool operator!=(const MatrixBase<OtherDerived>& other) const
     { return cwiseNotEqual(other).any(); }
 
     NoAlias<Derived,Eigen::MatrixBase > noalias();
@@ -328,15 +321,11 @@ template<typename Derived> class MatrixBase
 
 /////////// LU module ///////////
 
-    EIGEN_DEVICE_FUNC
     inline const FullPivLU<PlainObject> fullPivLu() const;
-    EIGEN_DEVICE_FUNC
     inline const PartialPivLU<PlainObject> partialPivLu() const;
 
-    EIGEN_DEVICE_FUNC
     inline const PartialPivLU<PlainObject> lu() const;
 
-    EIGEN_DEVICE_FUNC
     inline const Inverse<Derived> inverse() const;
 
     template<typename ResultType>
@@ -401,12 +390,14 @@ template<typename Derived> class MatrixBase
     EIGEN_DEVICE_FUNC
     inline PlainObject unitOrthogonal(void) const;
 
+    EIGEN_DEVICE_FUNC
     inline Matrix<Scalar,3,1> eulerAngles(Index a0, Index a1, Index a2) const;
 
     // put this as separate enum value to work around possible GCC 4.3 bug (?)
     enum { HomogeneousReturnTypeDirection = ColsAtCompileTime==1&&RowsAtCompileTime==1 ? ((internal::traits<Derived>::Flags&RowMajorBit)==RowMajorBit ? Horizontal : Vertical)
                                           : ColsAtCompileTime==1 ? Vertical : Horizontal };
     typedef Homogeneous<Derived, HomogeneousReturnTypeDirection> HomogeneousReturnType;
+    EIGEN_DEVICE_FUNC
     inline HomogeneousReturnType homogeneous() const;
 
     enum {
@@ -416,7 +407,7 @@ template<typename Derived> class MatrixBase
                   internal::traits<Derived>::ColsAtCompileTime==1 ? SizeMinusOne : 1,
                   internal::traits<Derived>::ColsAtCompileTime==1 ? 1 : SizeMinusOne> ConstStartMinusOne;
     typedef EIGEN_EXPR_BINARYOP_SCALAR_RETURN_TYPE(ConstStartMinusOne,Scalar,quotient) HNormalizedReturnType;
-
+    EIGEN_DEVICE_FUNC
     inline const HNormalizedReturnType hnormalized() const;
 
 ////////// Householder module ///////////
@@ -453,16 +444,24 @@ template<typename Derived> class MatrixBase
 ///////// MatrixFunctions module /////////
 
     typedef typename internal::stem_function<Scalar>::type StemFunction;
-    const MatrixExponentialReturnValue<Derived> exp() const;
+#define EIGEN_MATRIX_FUNCTION(ReturnType, Name, Description) \
+    /** \returns an expression of the matrix Description of \c *this. \brief This function requires the <a href="unsupported/group__MatrixFunctions__Module.html"> unsupported MatrixFunctions module</a>. To compute the coefficient-wise Description use ArrayBase::##Name . */ \
+    const ReturnType<Derived> Name() const;
+#define EIGEN_MATRIX_FUNCTION_1(ReturnType, Name, Description, Argument) \
+    /** \returns an expression of the matrix Description of \c *this. \brief This function requires the <a href="unsupported/group__MatrixFunctions__Module.html"> unsupported MatrixFunctions module</a>. To compute the coefficient-wise Description use ArrayBase::##Name . */ \
+    const ReturnType<Derived> Name(Argument) const;
+
+    EIGEN_MATRIX_FUNCTION(MatrixExponentialReturnValue, exp, exponential)
+    /** \brief Helper function for the <a href="unsupported/group__MatrixFunctions__Module.html"> unsupported MatrixFunctions module</a>.*/
     const MatrixFunctionReturnValue<Derived> matrixFunction(StemFunction f) const;
-    const MatrixFunctionReturnValue<Derived> cosh() const;
-    const MatrixFunctionReturnValue<Derived> sinh() const;
-    const MatrixFunctionReturnValue<Derived> cos() const;
-    const MatrixFunctionReturnValue<Derived> sin() const;
-    const MatrixSquareRootReturnValue<Derived> sqrt() const;
-    const MatrixLogarithmReturnValue<Derived> log() const;
-    const MatrixPowerReturnValue<Derived> pow(const RealScalar& p) const;
-    const MatrixComplexPowerReturnValue<Derived> pow(const std::complex<RealScalar>& p) const;
+    EIGEN_MATRIX_FUNCTION(MatrixFunctionReturnValue, cosh, hyperbolic cosine)
+    EIGEN_MATRIX_FUNCTION(MatrixFunctionReturnValue, sinh, hyperbolic sine)
+    EIGEN_MATRIX_FUNCTION(MatrixFunctionReturnValue, cos, cosine)
+    EIGEN_MATRIX_FUNCTION(MatrixFunctionReturnValue, sin, sine)
+    EIGEN_MATRIX_FUNCTION(MatrixSquareRootReturnValue, sqrt, square root)
+    EIGEN_MATRIX_FUNCTION(MatrixLogarithmReturnValue, log, logarithm)
+    EIGEN_MATRIX_FUNCTION_1(MatrixPowerReturnValue,        pow, power to \c p, const RealScalar& p)
+    EIGEN_MATRIX_FUNCTION_1(MatrixComplexPowerReturnValue, pow, power to \c p, const std::complex<RealScalar>& p)
 
   protected:
     EIGEN_DEVICE_FUNC MatrixBase() : Base() {}
