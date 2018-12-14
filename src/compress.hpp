@@ -14,54 +14,168 @@
 #include "encode.hpp"
 #include "tthresh.hpp"
 #include "tucker.hpp"
-#include "zlib_io.hpp"
+#include "io.hpp"
 #include <unistd.h>
+#include <math.h>
 #include <Eigen/Dense>
+#include <map>
+
+typedef __float128 LLDOUBLE;
+typedef __float80 LDOUBLE;
 
 using namespace std;
 using namespace Eigen;
 
-// *** Variable types ***
-// Number of dimensions: uint8_t
-// Chunk counting: uint8_t
-// Size of each dimension: uint32_t
-// Total size: size_t
+int qneeded;
 
-// *** Structure of the compressed file ***
-// (1) 1 byte: number of dimensions n
-// (2) n * 4 bytes: tensor sizes
-// (3) 1 byte: tensor type
-// (4) Per-chunk information and masks: n_chunks * (minimum + maximum + compressed mask)
-// (5) n * 4 bytes: tensor ranks
-// (6) Factor matrices
-// (7) The quantized core
+double rle_time = 0;
+double raw_time = 0;
 
-void encode_factor(Block<MatrixXd, -1, -1, true> U, vector < uint8_t >&U_q) {
+double price = -1, total_bits_core = -1, eps_core = -1;
+size_t total_bits = 0;
 
-    // First, the matrix's maximum, used for quantization
-    double maximum = U.array().abs().maxCoeff();
+
+vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is_core, bool verbose=false) {
+
+    /**********************************************/
+    // Compute and save maximum (in absolute value)
+    /**********************************************/
+
+    double maximum = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (abs(c[i]) > maximum)
+            maximum = abs(c[i]);
+    }
+    double scale = ldexp(1, 63-ilogb(maximum));
+
     uint64_t tmp;
-    memcpy(&tmp, (void*)&maximum, sizeof(maximum));
-    zlib_write_bits(tmp, 64);
+    memcpy(&tmp, (void*)&scale, sizeof(scale));
+    write_bits(tmp, 64);
 
-    // Then the matrix itself, quantized
-    for (uint32_t j = 0; j < U.cols(); ++j) {
-        for (uint32_t i = 0; i < U.rows(); ++i) {
-            uint8_t q = U_q[j];
-            if (q > 0) {
-                q = min(63, q + 2); // A good compromise
-                uint64_t to_write;
-                if (q == 63)
-                    to_write = *reinterpret_cast<uint64_t*>(&U(i,j));
+    LLDOUBLE normsq = 0;
+    vector<uint64_t> coreq(size);
+    for (size_t i = 0; i < size; ++i) {
+        coreq[i] = uint64_t(abs(c[i])*scale);
+        normsq += LLDOUBLE(coreq[i])*coreq[i];
+    }
+    LLDOUBLE sse = normsq;
+    LDOUBLE last_eps = 1;
+    LDOUBLE thresh = eps_target*eps_target*normsq;
+
+    /**************/
+    // Encode array
+    /**************/
+
+    vector<uint64_t> current(size, 0);
+
+    bool done = false;
+    total_bits = 0;
+    size_t last_total_bits = total_bits;
+    double eps_delta = 0, size_delta = 0, epsilon;
+    int q;
+    for (q = 63; q >= 0; --q) {
+        if (verbose and is_core)
+            cout << "Encoding core's bit plane p = " << q;
+        vector<size_t> rle;
+        LDOUBLE plane_sse = 0;
+        size_t plane_ones = 0;
+        size_t counter = 0;
+        size_t i;
+        vector<bool> raw;
+        for (i = 0; i < size; ++i) {
+            bool current_bit = ((coreq[i]>>q)&1UL);
+            plane_ones += current_bit;
+            if (current[i] == 0) { // Feed to RLE
+                if (not current_bit)
+                    counter++;
                 else {
-                    to_write = min(((1UL << q) - 1), (uint64_t) roundl(abs(U(i, j)) / maximum * ((1UL << q) - 1)));
-                    if (U(i, j) < 0)
-                        to_write |=  1UL << q; // The sign is the most significant bit
+                    rle.push_back(counter);
+                    counter = 0;
                 }
-                zlib_write_bits(to_write, q+1);
+            }
+            else { // Feed to raw stream
+                ++total_bits;
+                raw.push_back(current_bit);
+            }
+
+            if (current_bit) {
+                plane_sse += (LDOUBLE(coreq[i] - current[i]));
+                current[i] |= 1UL<<q;
+                if (plane_ones%100 == 0) {
+                    LDOUBLE k = 1UL<<q;
+                    LDOUBLE sse_now = sse+(-2*k*plane_sse + k*k*plane_ones);
+                    if (sse_now <= thresh) {
+                        done = true;
+                        cout << " <- breakpoint: coefficient " << i;
+                        break;
+                    }
+                }
+
             }
         }
+        if (verbose and is_core)
+            cout << endl;
+
+        LDOUBLE k = 1UL<<q;
+        sse += -2*k*plane_sse + k*k*plane_ones;
+        rle.push_back(counter);
+
+        uint64_t rawsize = raw.size();
+        write_bits(rawsize, 64);
+        total_bits += 64;
+
+        {
+            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            for (size_t i = 0; i < raw.size(); ++i)
+                write_bits(raw[i], 1);
+            raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+        }
+        {
+            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            uint64_t this_part = encode(rle);
+            rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+            total_bits += this_part;
+        }
+
+        epsilon = sqrt(double(sse/normsq));
+        if (last_total_bits > 0) {
+            if (is_core) {
+                size_delta = (total_bits - last_total_bits) / double(last_total_bits);
+                eps_delta = (last_eps - epsilon) / epsilon;
+            }
+            else {
+                if ((total_bits/total_bits_core) / (epsilon/eps_core) >= price)
+                    done = true;
+            }
+        }
+        last_total_bits = total_bits;
+        last_eps = epsilon;
+
+        write_bits(done, 1);
+        total_bits++;
+
+        if (done)
+            break;
     }
+
+    /****************************************/
+    // Save signs of significant coefficients
+    /****************************************/
+
+    for (size_t i = 0; i < size; ++i) {
+        if (current[i] > 0) {
+            write_bits((c[i] > 0), 1);
+            total_bits++;
+        }
+    }
+
+    if (is_core) {
+        price = size_delta / eps_delta;
+        eps_core = epsilon;
+        total_bits_core = total_bits;
+    }
+
+    return current;
 }
 
 double *compress(string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
@@ -138,10 +252,10 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     // Save tensor dimensionality, sizes and type
     /********************************************/
 
-    open_zlib_write(compressed_file.c_str());
-    zlib_write_stream(reinterpret_cast < unsigned char *> (&n), sizeof(n));
-    zlib_write_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(s[0]));
-    zlib_write_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(io_type_code));
+    open_write(compressed_file.c_str());
+    write_stream(reinterpret_cast < unsigned char *> (&n), sizeof(n));
+    write_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(s[0]));
+    write_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(io_type_code));
 
     /*****************************/
     // Load input file into memory
@@ -196,12 +310,11 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         sse = pow(target_value, 2) * size;
     else
         sse = pow((datamax - datamin) / (2 * (pow(10, target_value / 20))), 2) * size;
-    double lim = sse / size;
+    double epsilon = sqrt(sse) / datanorm;
     if (verbose) {
-        double eps = sqrt(sse) / datanorm;
         double rmse = sqrt(sse / size);
         double psnr = 20 * log10((datamax - datamin) / (2 * rmse));
-        cout << "We target eps = " << eps << ", rmse = " << rmse << ", psnr = " << psnr << endl;
+        cout << "We target eps = " << epsilon << ", rmse = " << rmse << ", psnr = " << psnr << endl;
     }
 
     /*********************************/
@@ -210,244 +323,92 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
 
     if (verbose)
         start_timer("Tucker decomposition...\n");
-    double *c = new double[size];	// Tucker core
+    double *c = new double[size]; // Tucker core
+
     memcpy(c, data, size * sizeof(double));
+
     vector<MatrixXd> Us(n); // Tucker factor matrices
     hosvd_compress(c, Us, verbose);
-    if (verbose)
+
+    if (verbose) {
         stop_timer();
-
-    /***********************************/
-    // Sort abs(core) in ascending order
-    /***********************************/
-
-    if (verbose)
-        start_timer("Sorting core's absolute values... ");
-    vector< pair<double, size_t> > sorting(size);
-    for (size_t i = 0; i < size; ++i)
-        sorting[i] = pair < double, size_t >(abs(c[i]), i);
-    sort(sorting.begin(), sorting.end());
-    if (verbose)
-        stop_timer();
-
-    /************************************************/
-    // Generate adaptive chunks from the sorted curve
-    /************************************************/
-
-    if (verbose)
-        start_timer("Encoding chunks...\n");
-    size_t adder = 1;
-    uint8_t q = 0;
-    size_t left = 0;
-    size_t old_right = left; // Inclusive bound
-    size_t right = left; // Exclusive bound
-    vector<uint8_t> chunk_ids(size, 0);
-    uint8_t chunk_num = 1;
-    vector< vector<uint8_t> > Us_q(n);
-    for (uint8_t i = 0; i < n; ++i)
-        Us_q[i] = vector<uint8_t> (s[i], 0);
-    size_t total_qbits = 0, total_hbits = 0;
-    while (left < size) {
-        while (left < size and q < 63) {
-            right = min(size, old_right + adder);
-            double chunk_min = sorting[left].first;
-            double chunk_max = sorting[right - 1].first;
-            double sse = 0;
-            if (right > left + 1) {
-                if (q > 0) {
-                    // Compute the quantization error. It could also be approximated as follows:
-                    // double k = (chunk_max - chunk_min)/double(1<<q); // Quantization resolution
-                    // mse = k*k/12; // Expected L2 error: $(\int_{-k/2}^{k/2} x^2 dx)/k$
-                    // But that tends to underestimate the error
-                    for (size_t i = left; i < right; ++i) {
-                        uint64_t quant = roundl((sorting[i].first - chunk_min) * ((1UL << q) - 1.) / (chunk_max - chunk_min));
-                        double dequant = quant * (chunk_max - chunk_min) / ((1UL << q) - 1.) + chunk_min;
-                        sse += (sorting[i].first - dequant) * (sorting[i].first - dequant);
-                    }
-                } else {
-                    for (size_t i = left; i < right; ++i)
-                        sse += (sorting[i].first - chunk_min) * (sorting[i].first - chunk_min);
-                }
-            }
-            double mse = sse / (right - left);
-            if (debug)
-                cout << "\t\tWe try [" << left << "," << right << "), adder = " << adder << ", mse = " << mse << endl;
-            if (mse >= 0.9 * lim or right == size) {
-                if (mse >= lim) {
-                    if (adder > 1) {
-                        adder = ceil(adder / 4.);
-                        continue;
-                    } else {
-                        right = old_right;
-                        break;
-                    }
-                } else
-                    break;
-            } else {
-                old_right = right;
-                adder *= 2;
-            }
-        }
-
-        if (q == 63)
-            right = size;
-
-        size_t chunk_size = (right - left);
-        double chunk_min = sorting[left].first;
-        double chunk_max = sorting[right - 1].first;
-
-        /********************************************/
-        // Quantize (in-place) the core elements
-        /********************************************/
-
-        // If q = 0 there's no need to store anything quantized, not even the sign
-        // If q = 63, values are kept as they are (doubles) and we forget about quantization
-        if (q > 0 and q < 63) {
-            #pragma omp parallel for
-            for (size_t i = left; i < right; ++i) {
-                size_t to_write = 0;
-                if (chunk_size > 1)
-                    // The following min() prevents overflowing the q-bit representation when converting double -> long int
-                    to_write = min(((1UL << q) - 1), (uint64_t)
-                                   roundl((sorting[i].first - chunk_min) / (chunk_max - chunk_min) * ((1UL << q) - 1)));
-                if (c[sorting[i].second] < 0)
-                    to_write |= 1UL << q;
-                memcpy(&c[sorting[i].second], (void*)&to_write, sizeof(to_write));
-            }
-        }
-
-        /********************************************/
-        // Save mask and compute RLE+Huffman out of it
-        /********************************************/
-
-        #pragma omp parallel for
-        for (size_t i = left; i < right; ++i) {
-            size_t index = sorting[i].second;
-            chunk_ids[index] = chunk_num;
-
-            // We use this loop also to update the needed quantization bits per factor column
-            for (uint8_t dim = 0; dim < n; ++dim) {
-                size_t coord = index % sprod[dim+1] / sprod[dim];
-                Us_q[dim][coord] = max(Us_q[dim][coord], q);
-            }
-        }
-
-        vector<size_t> rle;
-
-        // RLE
-        bool current_bit = false;
-        bool last_bit = false;
-        size_t counter = 0;
-        for (size_t i = 0; i < size; ++i) {
-            if (chunk_ids[i] == 0)
-                current_bit = false;
-            else if (chunk_ids[i] == chunk_num)
-                current_bit = true;
-            else
-                continue;
-            if (current_bit == last_bit)
-                counter++;
-            else {
-                rle.push_back(counter);
-                counter = 1;
-                last_bit = current_bit;
-            }
-        }
-        rle.push_back(counter);
-
-        zlib_write_stream(reinterpret_cast<uint8_t*> (&chunk_min), sizeof(chunk_min));
-        zlib_write_stream(reinterpret_cast<uint8_t*> (&chunk_max), sizeof(chunk_max));
-        size_t hbits = encode(rle);
-        total_hbits += hbits;
-
-        if (verbose) {
-            size_t qbits = 0;
-            if (q > 0)
-                qbits = (q + 1) * (right - left);	// The "+1" is for the sign
-            total_qbits += qbits;
-            cout << "\tEncoded chunk " << int(chunk_num) << " (q=" << int(q) << "), min=" << chunk_min << ", max=" << chunk_max << ", qbits=" << qbits << ", hbits=" << hbits << ", bits=[" << left << "," << right << "), size=" << right - left << endl << flush;
-        }
-
-        // Update control variables
-        q++;
-        left = right;
-        old_right = left;
-        chunk_num++;
+//        cout << "RLE time (ms):" << rle_time << endl;
+//        cout << "Raw time (ms):" << raw_time << endl;
     }
-    if (verbose)
-        stop_timer();
-    if (debug)
-        cout << "Total qbits=" << total_qbits << ", total hbits=" << total_hbits << endl;
+
+    /**************************/
+    // Encode and save the core
+    /**************************/
+
+    open_wbit();
+    vector<uint64_t> current = encode_array(c, size, epsilon, true, verbose);
+    close_wbit();
 
     /*******************************/
     // Compute and save tensor ranks
     /*******************************/
 
-    r = vector<uint32_t> (n);
-    rprod = vector<size_t> (n+1);
-    rprod[0] = 1;
-    for (uint8_t i = 0; i < n; ++i) {
-        for (uint32_t j = 0; j < s[i]; ++j)
-            if (Us_q[i][j])
-                r[i] = j+1;
-        rprod[i+1] = rprod[i]*r[i];
+    if (verbose)
+        start_timer("Computing ranks... ");
+    r = vector<uint32_t> (n, 0);
+    vector<size_t> indices(n, 0);
+    vector< RowVectorXd > slicenorms(n);
+    for (int dim = 0; dim < n; ++dim) {
+        slicenorms[dim] = RowVectorXd(s[dim]);
+        slicenorms[dim].setZero();
     }
+    for (size_t i = 0; i < size; ++i) {
+        if (current[i] > 0) {
+            for (int dim = 0; dim < n; ++dim) {
+                slicenorms[dim][indices[dim]] += double(current[i])*current[i];
+            }
+        }
+        indices[0]++;
+        int pos = 0;
+        while (indices[pos] >= s[pos] and pos < n-1) {
+            indices[pos] = 0;
+            pos++;
+            indices[pos]++;
+        }
+    }
+
+    for (int dim = 0; dim < n; ++dim) {
+        for (size_t i = 0; i < s[dim]; ++i) {
+            if (slicenorms[dim][i] > 0)
+                r[dim] = i+1;
+            slicenorms[dim][i] = sqrt(slicenorms[dim][i]);
+        }
+    }
+    if (verbose)
+        stop_timer();
+
     if (verbose) {
         cout << "Compressed tensor ranks:";
         for (uint8_t i = 0; i < n; ++i)
             cout << " " << r[i];
         cout << endl;
     }
-    zlib_write_stream(reinterpret_cast<unsigned char*> (&r[0]), n*sizeof(r[0]));
+    write_stream(reinterpret_cast<unsigned char*> (&r[0]), n*sizeof(r[0]));
 
-    /*********************************/
-    // Encode and save factor matrices
-    /*********************************/
-
-    if (debug) {
-        cout << "q's for the factor columns: " << endl;
-        for (uint8_t i = 0; i < n; ++i) {
-            for (uint32_t j = 0; j < s[i]; ++j)
-                cout << " " << int(Us_q[i][j]);
-            cout << endl;
-        }
+    for (uint8_t i = 0; i < n; ++i) {
+        write_stream(reinterpret_cast<uint8_t*> (slicenorms[i].data()), r[i]*sizeof(double));
     }
-    if (verbose)
-        start_timer("Encoding factor matrices... ");
-    for (uint8_t i = 0; i < n; ++i)
-        zlib_write_stream(reinterpret_cast<uint8_t*> (&Us_q[i][0]), r[i]*sizeof(uint8_t));
-    zlib_open_wbit();
-    for (uint8_t i = 0; i < n; ++i)
-        encode_factor(Us[i].leftCols(r[i]), Us_q[i]);
-    zlib_close_wbit();
-    if (verbose)
-        stop_timer();
 
-    /************************/
-    // Save the core encoding
-    /************************/
-
-    if (verbose)
-        start_timer("Saving core quantization... ");
-    zlib_open_wbit();
-    for (size_t i = 0; i < size; ++i) {
-        uint8_t q = chunk_ids[i]-1;
-        if (q > 0)
-            zlib_write_bits(*reinterpret_cast<uint64_t*> (&c[i]), q+1);
+    vector<MatrixXd> Uweighteds;
+    open_wbit();
+    for (int dim = 0; dim < n; ++dim) {
+        MatrixXd Uweighted = Us[dim].leftCols(r[dim]);
+        for (size_t col = 0; col < r[dim]; ++col)
+            Uweighted.col(col) = Uweighted.col(col)*slicenorms[dim][col];
+        Uweighteds.push_back(Uweighted);
+        encode_array(Uweighted.data(), s[dim]*r[dim], 0, false);//*(s[i]*s[i]/sprod[n]));  // TODO flatten in F order?
     }
-    zlib_close_wbit();
-    if (verbose)
-        stop_timer();
+    close_wbit();
+    close_write();
     delete[] c;
-    close_zlib_write();
-
-    /*******************************************************************/
-    // Compute and display statistics of the resulting compression ratio
-    /*******************************************************************/
-
     size_t newbits = zs.total_written_bytes * 8;
     cout << "oldbits = " << size * io_type_size * 8L << ", newbits = " << newbits << ", compressionratio = " << size * io_type_size * 8L / double (newbits)
-         << ", bpv = " << newbits / double (size) << endl << flush;
+<< ", bpv = " << newbits / double (size) << endl << flush;
     return data;
 }
 

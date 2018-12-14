@@ -37,7 +37,7 @@ THE SOFTWARE.
 
 #include <map>
 #include <iterator>
-#include "zlib_io.hpp"
+#include "io.hpp"
 
 using namespace std;
 
@@ -50,7 +50,7 @@ uint64_t THREE_FOURTHS = ONE_FOURTH*3;
 uint64_t encoding_bits;
 
 inline void put_bit(char bit) {
-    zlib_write_bits(bit, 1);
+    write_bits(bit, 1);
     encoding_bits++;
 }
 
@@ -77,7 +77,7 @@ uint64_t encode(vector<uint64_t>& rle) {
 
     encoding_bits = 0;
 
-    zlib_open_wbit();
+//    open_wbit();
 
     //*********
     //********* Write frequencies
@@ -85,7 +85,7 @@ uint64_t encode(vector<uint64_t>& rle) {
 
     // Number of key/frequency pairs
     uint64_t dict_size = frequencies.size();
-    zlib_write_bits(dict_size, sizeof(uint64_t)*8);
+    write_bits(dict_size, sizeof(uint64_t)*8);
 //    cerr << "dict_size: " << dict_size << endl;
     encoding_bits += sizeof(uint64_t)*8;
 
@@ -103,10 +103,10 @@ uint64_t encode(vector<uint64_t>& rle) {
             key_len++;
         }
         key_len = max(1, key_len); // A 0 still requires 1 bit for us
-        zlib_write_bits(key_len, 6);
+        write_bits(key_len, 6);
 
         // Next, the key itself
-        zlib_write_bits(key, key_len);
+        write_bits(key, key_len);
 
         // Now, the frequency's length
         uint8_t freq_len = 0;
@@ -116,17 +116,17 @@ uint64_t encode(vector<uint64_t>& rle) {
             freq_len++;
         }
         freq_len = max(1, freq_len); // A 0 still requires 1 bit for us
-        zlib_write_bits(freq_len, 6);
+        write_bits(freq_len, 6);
 
         // Finally, the frequency itself
-        zlib_write_bits(freq, freq_len);
+        write_bits(freq, freq_len);
 
         encoding_bits += 6 + key_len + 6 + freq_len;
     }
 
     // Number N of symbols to code
     uint64_t n_symbols = rle.size();
-    zlib_write_bits(n_symbols, sizeof(uint64_t)*8);
+    write_bits(n_symbols, sizeof(uint64_t)*8);
     encoding_bits += sizeof(uint64_t)*8;
 
     //*********
@@ -176,10 +176,10 @@ uint64_t encode(vector<uint64_t>& rle) {
     else
       put_bit_plus_pending(1, pending_bits);
 
-    zlib_write_bits(0UL, CODE_VALUE_BITS-2); // Trailing zeros
+    write_bits(0UL, CODE_VALUE_BITS-2); // Trailing zeros
     encoding_bits += CODE_VALUE_BITS-2;
 
-    zlib_close_wbit();
+//    close_wbit();
 
     return encoding_bits;
 }

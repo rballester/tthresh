@@ -41,14 +41,14 @@ using namespace std;
 
 void decode(vector<size_t>& rle) {
 
-    zlib_open_rbit();
+//    open_rbit();
 
     //*********
     //********* Read the frequencies
     //*********
 
     // Number of key/frequency pairs
-    uint64_t dict_size = zlib_read_bits(sizeof(uint64_t)*8);
+    uint64_t dict_size = read_bits(sizeof(uint64_t)*8);
 
     // Pairs of key -> probability's lower bound
     std::map<uint64_t, uint64_t> lowers;
@@ -57,22 +57,22 @@ void decode(vector<size_t>& rle) {
     for (uint64_t i = 0; i < dict_size; ++i) {
 
         // First, the key's length
-        uint8_t key_len = zlib_read_bits(6);
+        uint8_t key_len = read_bits(6);
 
         // Next, the key itself
-        uint64_t key = zlib_read_bits(key_len);
+        uint64_t key = read_bits(key_len);
 
         // Now, the frequency's length
-        uint8_t freq_len = zlib_read_bits(6);
+        uint8_t freq_len = read_bits(6);
 
         // Finally, the frequency itself
-        uint64_t freq = zlib_read_bits(freq_len);
+        uint64_t freq = read_bits(freq_len);
         lowers[count] = key;
         count += freq;
     }
 
     // Number of symbols to translate back
-    uint64_t n_symbols = zlib_read_bits(sizeof(uint64_t)*8);
+    uint64_t n_symbols = read_bits(sizeof(uint64_t)*8);
 
     lowers[n_symbols] = 0; // The last upper bound
 
@@ -83,7 +83,7 @@ void decode(vector<size_t>& rle) {
     uint64_t high = MAX_CODE;
     uint64_t low = 0;
     uint64_t value = 0;
-    value = zlib_read_bits(CODE_VALUE_BITS);
+    value = read_bits(CODE_VALUE_BITS);
 
     for ( ; ; ) {
 
@@ -118,7 +118,7 @@ void decode(vector<size_t>& rle) {
             high <<= 1;
             high++;
             value <<= 1;
-            value += zlib_read_bits(1) ? 1 : 0;
+            value += read_bits(1) ? 1 : 0;
         }
 
         if (rle.size() == n_symbols)

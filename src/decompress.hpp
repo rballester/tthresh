@@ -11,7 +11,7 @@
 
 #include "tthresh.hpp"
 #include "tucker.hpp"
-#include "zlib_io.hpp"
+#include "io.hpp"
 #include "decode.hpp"
 #include "Slice.hpp"
 #include <Eigen/Dense>
@@ -19,33 +19,106 @@
 using namespace std;
 using namespace Eigen;
 
-void decode_factor(MatrixXd& U, vector<uint8_t>& U_q, uint32_t n_rows, uint32_t n_cols) {
+double maximum;
+int q;
+size_t pointer;
 
-    // First, the matrix's maximum, used for quantization
-    double maximum;
-    uint64_t tmp = zlib_read_bits(64);
+/////
+double decode_rle_time = 0;
+double decode_raw_time = 0;
+double unscramble_time = 0;
+/////
+
+vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose) {
+
+    uint64_t tmp = read_bits(64);
     memcpy(&maximum, (void*)&tmp, sizeof(tmp));
 
-    // Then we can dequantize the matrix
-    U = MatrixXd(n_rows, n_cols);
-    for (uint32_t j = 0; j < n_cols; ++j) {
-        for (uint32_t i = 0; i < n_rows; ++i) {
-            uint8_t q = U_q[j];
-            if (q > 0) {
-                q = min(63, q + 2);
-                uint64_t quant = zlib_read_bits(q+1);
-                if (q == 63) // The matrix value is read verbatim as a double and we get 0 error (except machine round-off)
-                    memcpy(&U(i, j), (void*)&quant, sizeof(quant));
-                else { // We dequantize this matrix value
-                    uint8_t sign = (quant >> q) & 1UL; // Read the sign bit
-                    quant &= ~(1UL << q); // Put the sign bit to zero
-                    U(i, j) = -(2 * sign - 1) / ((1UL << q) - double (1)) *maximum * double (quant);
+    vector<uint64_t> current(size, 0);
+
+    int zeros = 0;
+    for (q = 63; q >= 0; --q) {
+        if (verbose and is_core)
+            cout << "Encoding core's bit plane p = " << q << endl;
+        uint64_t rawsize = read_bits(64);
+        vector<bool> raw;
+        high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+        for (uint64_t i = 0; i < rawsize; ++i)
+            raw.push_back(read_bits(1));
+        decode_raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+
+        vector<size_t> rle;
+        timenow = chrono::high_resolution_clock::now();
+        decode(rle);
+        decode_rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+
+        int64_t raw_index = 0;
+        int64_t rle_value = -1;
+        int64_t rle_index = -1;
+
+        size_t read_from_rle = 0;
+        size_t read_from_raw = 0;
+
+        timenow = chrono::high_resolution_clock::now();
+        for (pointer = 0; pointer < size; ++pointer) {
+            uint64_t this_bit = 0;
+            if (current[pointer] == 0) { // Consume bit from RLE
+                if (rle_value == -1) {
+                    rle_index++;
+                    if (rle_index == int64_t(rle.size()))
+                        break;
+                    rle_value = rle[rle_index];
+                }
+                if (rle_value >= 1) {
+                    read_from_rle++;
+                    this_bit = 0;
+                    rle_value--;
+                }
+                else if (rle_value == 0) {
+                    read_from_rle++;
+                    this_bit = 1;
+                    rle_index++;
+                    if (rle_index == int64_t(rle.size()))
+                        break;
+                    rle_value = rle[rle_index];
                 }
             }
+            else { // Consume bit from raw
+                if (raw_index == int64_t(raw.size()))
+                    break;
+                this_bit = raw[raw_index];
+                read_from_raw++;
+                raw_index++;
+            }
+            current[pointer] += this_bit << q;
+        }
+        unscramble_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+
+        bool done = read_bits(1);
+        if (done)
+            break;
+        else
+            zeros++;
+    }
+    return current;
+}
+
+vector<double> dequantize(vector<uint64_t>& current) { // TODO after resize
+    size_t size = current.size();
+    vector<double> c(size, 0);
+    for (size_t i = 0; i < size; ++i) {
+        if (current[i] > 0) {
+            if (i < pointer) {
+                if (q >= 1)
+                    current[i] += 1UL<<(q-1);
+            }
             else
-                U(i, j) = 0;
+                current[i] += 1UL<<q;
+            char sign = read_bits(1);
+            c[i] = double(current[i]) / maximum * (sign*2-1);
         }
     }
+    return c;
 }
 
 void decompress(string compressed_file, string output_file, double *data, vector<Slice>& cutout, bool autocrop, bool verbose, bool debug) {
@@ -54,10 +127,10 @@ void decompress(string compressed_file, string output_file, double *data, vector
     // Read output tensor dimensionality, sizes and type
     /***************************************************/
 
-    open_zlib_read(compressed_file);
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&n), sizeof(n));
+    open_read(compressed_file);
+    read_stream(reinterpret_cast<uint8_t*> (&n), sizeof(n));
     s = vector<uint32_t> (n);
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&s[0]), n * sizeof(s[0]));
+    read_stream(reinterpret_cast<uint8_t*> (&s[0]), n * sizeof(s[0]));
 
     bool whole_reconstruction = cutout.size() == 0;
     if (cutout.size() < n) // Non-specified slicings are assumed to be the standard (0,1,-1)
@@ -91,7 +164,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     }
 
     uint8_t io_type_code;
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&io_type_code), sizeof(io_type_code));
+    read_stream(reinterpret_cast<uint8_t*> (&io_type_code), sizeof(io_type_code));
     uint8_t io_type_size;
     if (io_type_code == 0)
         io_type_size = sizeof(unsigned char);
@@ -104,93 +177,20 @@ void decompress(string compressed_file, string output_file, double *data, vector
     else
         io_type_size = sizeof(double);
 
-    /****************************/
-    // Read and decode core masks
-    /****************************/
+    /*************/
+    // Decode core
+    /*************/
 
-    vector<double> minimums;
-    vector<double> maximums;
-    vector<uint8_t> chunk_ids(size, 0);
-    uint8_t chunk_num = 1;
-    size_t assigned = 0;
-    vector<size_t> jumps(size+1, 0);
-    jumps[0] = size+1;
-    if (verbose)
-        start_timer("Decoding chunks...\n");
-
-    while(assigned < size) {
-        double chunk_min;
-        zlib_read_stream(reinterpret_cast<uint8_t*> (&chunk_min), sizeof(chunk_min));
-        minimums.push_back(chunk_min);
-        double chunk_max;
-        zlib_read_stream(reinterpret_cast<uint8_t*> (&chunk_max), sizeof(chunk_max));
-        maximums.push_back(chunk_max);
-        // At each step, we integrate a new mask. Each mask indexes only over the "zeros" of the previous mask
-        // The new mask always comes in RLE form
-        // The current mask is described by the "jumps" array: jumps[0] is the first RLE counter.
-        // If jumps[i] = n is an RLE counter, then jumps[i+n] coontains the next counter. The values in between can be safely ignored
-        vector<size_t> rle;
-        decode(rle);
-        size_t cur_pos = 0;
-        bool jump_bit = false;
-        bool cur_bit = false;
-        size_t jump_ahead = jumps[cur_pos]; // How many bits are remaining from the "jumps" RLE
-        size_t last_zero_start = 0;
-        size_t last_one_start = -1;
-        rle[0]++; // We assume the mask always starts with a "ghost" 0, to simplify corner cases when the first counter is 0
-        for (size_t i = 0; i < rle.size(); ++i) {
-            size_t counter = rle[i];
-            while (counter > 0) {
-                if (jump_bit == false) {
-                    size_t step = min(counter, jump_ahead);
-                    if (cur_bit == false) { // This is the only case in which
-                        if (last_one_start != size_t(-1))
-                            jumps[last_one_start] = cur_pos-last_one_start;
-                        last_zero_start = cur_pos;
-                        jumps[cur_pos] = step;
-                        cur_pos += step;
-                        if (cur_pos < size+1)
-                            last_one_start = cur_pos;
-                    }
-                    else {
-                        for (size_t pos = cur_pos; pos < cur_pos+step; ++pos)
-                            chunk_ids[pos-1] = chunk_num;
-                        assigned += step;
-                        cur_pos += step;
-                    }
-                    counter -= step;
-                    jump_ahead -= step;
-                }
-                else {
-                    cur_pos += jump_ahead;
-                    jump_ahead = 0;
-                }
-                if (jump_ahead == 0 and cur_pos < size+1) {
-                    jump_bit = not jump_bit;
-                    jump_ahead = jumps[cur_pos];
-                }
-            }
-            if (cur_pos < size+1) // Not yet at the end of the mask
-                cur_bit = not cur_bit;
-        }
-        if (cur_bit == false and jump_bit == false) // We finished with a sequence of 0's
-            jumps[last_zero_start] = size+1-last_zero_start;
-        else // We finished with a sequence of 1's
-            jumps[last_one_start] = size+1-last_one_start;
-
-        if (verbose)
-            cout << "\tDecoded chunk " << int(chunk_num) << " (q=" << int (chunk_num - 1) << "), min=" << minimums[minimums.size()-1] << ", max=" << maximums[maximums.size()-1] << endl << flush;
-        ++chunk_num;
-    }
-    if (verbose)
-        stop_timer();
+    vector<uint64_t> current = decode_array(sprod[n], true, verbose);
+    vector<double> c = dequantize(current);
+    close_rbit();
 
     /*******************/
     // Read tensor ranks
     /*******************/
 
     r = vector<uint32_t> (n);
-    zlib_read_stream(reinterpret_cast<uint8_t*> (&r[0]), n*sizeof(uint32_t));
+    read_stream(reinterpret_cast<uint8_t*> (&r[0]), n*sizeof(r[0]));
     rprod = vector<size_t> (n+1);
     rprod[0] = 1;
     for (uint8_t i = 0; i < n; ++i)
@@ -202,39 +202,25 @@ void decompress(string compressed_file, string output_file, double *data, vector
         cout << endl;
     }
 
-    /**********************/
-    // Read factor matrices
-    /**********************/
-
-    if (verbose)
-        start_timer("Decoding factor matrices... ");
-
-    // Compute the needed quantization bits per factor column
-    vector < MatrixXd > Us(n);
-    vector< vector<uint8_t> > Us_q(n);
+    vector<RowVectorXd> slicenorms(n);
     for (uint8_t i = 0; i < n; ++i) {
-        Us_q[i] = vector<uint8_t> (r[i]);
-        zlib_read_stream(reinterpret_cast<uint8_t*> (&Us_q[i][0]), r[i]*sizeof(uint8_t));
+        slicenorms[i] = RowVectorXd(r[i]);
+        for (uint64_t col = 0; col < r[i]; ++col) { // TODO faster
+            double norm;
+            read_stream(reinterpret_cast<uint8_t*> (&norm), sizeof(double));
+            slicenorms[i][col] = norm;
+        }
     }
-    zlib_open_rbit();
-    for (uint8_t i = 0; i < n; ++i)
-        decode_factor(Us[i], Us_q[i], s[i], r[i]);
-    if (verbose)
-        stop_timer();
-    
-    /*******************************************/
-    // Read the quantized core and dequantize it
-    /*******************************************/
 
-    if (verbose)
-        start_timer("Dequantizing core... ");
-    vector<double> c(rprod[n]);
-    zlib_open_rbit();
+    //**********************/
+    // Reshape core in place
+    //**********************/
+
     size_t index = 0; // Where to read from in the original core
     vector<size_t> indices(n, 0);
     uint8_t pos = 0;
     for (size_t i = 0; i < rprod[n]; ++i) { // i marks where to write in the new rank-reduced core
-        uint8_t q = chunk_ids[index]-1;
+        c[i] = c[index];
         indices[0]++;
         index++;
         pos = 0;
@@ -242,28 +228,31 @@ void decompress(string compressed_file, string output_file, double *data, vector
         while (indices[pos] >= r[pos] and pos < n-1) {
             indices[pos] = 0;
             index += sprod[pos+1] - r[pos]*sprod[pos];
-            indices[pos+1]++;
             pos++;
+            indices[pos]++;
         }
-        if (q > 0) {
-            double chunk_min = minimums[q];
-            double chunk_max = maximums[q];
-            uint64_t quant = zlib_read_bits(q+1);
-            if (q == 63) // The core value is read verbatim as a double and we get 0 error
-                memcpy(&c[i], (void*)&quant, sizeof(quant));
-            else { // We dequantize this core value
-                uint8_t sign = (quant >> q) & 1UL; // Read the sign bit
-                quant &= ~(1UL << q); // Put the sign bit to zero
-                double dequant;
-                dequant = quant / ((1UL << q) - 1.) * (chunk_max - chunk_min) + chunk_min;
-                c[i] = -(sign * 2 - 1) * dequant;
-            }
-        } else
-            c[i] = 0;
     }
-    close_zlib_read();
-    if (verbose)
-        stop_timer();
+
+    //*****************/
+    // Reweight factors
+    //*****************/
+
+    vector< MatrixXd > Us;
+    for (uint8_t i = 0; i < n; ++i) {
+        vector<uint64_t> factorq = decode_array(s[i]*r[i], false, verbose);
+        vector<double> factor = dequantize(factorq);
+        MatrixXd Uweighted(s[i], r[i]);
+        memcpy(Uweighted.data(), (void*)factor.data(), sizeof(double)*s[i]*r[i]);
+        MatrixXd U(s[i], r[i]);
+        for (size_t col = 0; col < r[i]; ++col) {
+            if (slicenorms[i][col] > 1e-10)
+                U.col(col) = Uweighted.col(col)/slicenorms[i][col];
+            else
+                U.col(col) *= 0;
+        }
+        Us.push_back(U);
+    }
+    close_rbit();
 
     /*************************/
     // Autocrop (if requested)
@@ -322,25 +311,25 @@ void decompress(string compressed_file, string output_file, double *data, vector
     double remapped = 0;
     for (size_t i = 0; i < snewprod[n]; ++i) {
         if (io_type_code == 0) {
-	    remapped = (unsigned char)(round(max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]))));
+            remapped = (unsigned char)(round(max(0.0, min(double(std::numeric_limits<unsigned char>::max()), c[i]))));
             reinterpret_cast < unsigned char *>(&buffer[0])[buffer_wpos] = remapped;
-	}
+        }
         else if (io_type_code == 1) {
-	    remapped = (unsigned short)(round(max(0.0, min(double(std::numeric_limits<unsigned short>::max()), c[i]))));
+            remapped = (unsigned short)(round(max(0.0, min(double(std::numeric_limits<unsigned short>::max()), c[i]))));
             reinterpret_cast < unsigned short *>(&buffer[0])[buffer_wpos] = remapped;
-	}
+        }
         else if (io_type_code == 2) {
-	    remapped = int(round(max(std::numeric_limits<int>::min(), min(double(std::numeric_limits<int>::max()), c[i]))));;
+            remapped = int(round(max(std::numeric_limits<int>::min(), min(double(std::numeric_limits<int>::max()), c[i]))));;
             reinterpret_cast < int *>(&buffer[0])[buffer_wpos] = remapped;
-	}
+        }
         else if (io_type_code == 3) {
-	    remapped = float(c[i]);
+            remapped = float(c[i]);
             reinterpret_cast < float *>(&buffer[0])[buffer_wpos] = remapped;
-	}
+        }
         else {
-	   remapped = c[i];
+           remapped = c[i];
            reinterpret_cast < double *>(&buffer[0])[buffer_wpos] = remapped;
-	}
+        }
         buffer_wpos++;
         if (buffer_wpos == buf_elems) {
             buffer_wpos = 0;
