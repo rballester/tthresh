@@ -2,7 +2,7 @@
 
 ## Multidimensional Compression Using the Tucker Tensor Decomposition
 
-This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data (R. Ballester-Ripoll, P. Lindstrom and R. Pajarola)](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**. It leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions, together with adaptive quantization, run-length and arithmetic coding to store the HOSVD transform coefficients' relative positions as sorted by their absolute magnitude.
+This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data (R. Ballester-Ripoll, P. Lindstrom and R. Pajarola)](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**, and leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions.
 
 If you use TTHRESH for a scientific publication, please cite one or both of these papers:
 
@@ -11,15 +11,11 @@ If you use TTHRESH for a scientific publication, please cite one or both of thes
 
 For more information on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
 
-### Visual Results (click to enlarge)
+### Visual Example (click to enlarge)
 
 "Isotropic fine" turbulence timestep (512x512x512, 32-bit float) from the [Johns Hopkins Turbulence Database](http://turbulence.pha.jhu.edu/newcutout.aspx):
 
 [<img src="https://github.com/rballester/tthresh/blob/master/images/isotropic_fine.png" width="1024" title="Isotropic fine">](https://github.com/rballester/tthresh/raw/master/images/isotropic_fine.png)
-
-"Foot" (256x256x256, 8-bit unsigned int) from the [TC18 Repository](http://www.tc18.org/code_data_set/3D_images.php):
-
-[<img src="https://github.com/rballester/tthresh/blob/master/images/foot.png" width="1024" title="Foot">](https://github.com/rballester/tthresh/raw/master/images/foot.png)
 
 ### Download
 
