@@ -24,22 +24,26 @@ int q;
 size_t pointer;
 
 /////
-double decode_rle_time = 0;
-double decode_raw_time = 0;
-double unscramble_time = 0;
+double decode_rle_time;
+double decode_raw_time;
+double unscramble_time;
 /////
 
-vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose) {
+vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose, bool debug) {
 
     uint64_t tmp = read_bits(64);
     memcpy(&maximum, (void*)&tmp, sizeof(tmp));
 
     vector<uint64_t> current(size, 0);
 
+    decode_rle_time = 0;
+    decode_raw_time = 0;
+    unscramble_time = 0;
+
     int zeros = 0;
     for (q = 63; q >= 0; --q) {
         if (verbose and is_core)
-            cout << "Encoding core's bit plane p = " << q << endl;
+            cout << "Decoding core's bit plane p = " << q << endl;
         uint64_t rawsize = read_bits(64);
         vector<bool> raw;
         high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
@@ -90,7 +94,8 @@ vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose) {
                 read_from_raw++;
                 raw_index++;
             }
-            current[pointer] += this_bit << q;
+            if (this_bit)
+                current[pointer] += this_bit << q;
         }
         unscramble_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
 
@@ -100,6 +105,8 @@ vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose) {
         else
             zeros++;
     }
+    if (debug)
+        cout << "decode_rle_time=" << decode_rle_time << ", decode_raw_time=" << decode_raw_time << ", unscramble_time=" << unscramble_time << endl;
     return current;
 }
 
@@ -181,7 +188,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
     // Decode core
     /*************/
 
-    vector<uint64_t> current = decode_array(sprod[n], true, verbose);
+    vector<uint64_t> current = decode_array(sprod[n], true, verbose, debug);
     vector<double> c = dequantize(current);
     close_rbit();
 
@@ -239,7 +246,7 @@ void decompress(string compressed_file, string output_file, double *data, vector
 
     vector< MatrixXd > Us;
     for (uint8_t i = 0; i < n; ++i) {
-        vector<uint64_t> factorq = decode_array(s[i]*r[i], false, verbose);
+        vector<uint64_t> factorq = decode_array(s[i]*r[i], false, verbose, debug);
         vector<double> factor = dequantize(factorq);
         MatrixXd Uweighted(s[i], r[i]);
         memcpy(Uweighted.data(), (void*)factor.data(), sizeof(double)*s[i]*r[i]);
