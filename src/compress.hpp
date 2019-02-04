@@ -106,7 +106,8 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
                     LDOUBLE sse_now = sse+(-2*k*plane_sse + k*k*plane_ones);
                     if (sse_now <= thresh) {
                         done = true;
-                        cout << " <- breakpoint: coefficient " << i;
+                        if (verbose)
+                            cout << " <- breakpoint: coefficient " << i;
                         break;
                     }
                 }
