@@ -41,63 +41,80 @@ vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose, bool debu
     unscramble_time = 0;
 
     int zeros = 0;
+    bool all_raw = false;
+    if (verbose and is_core)
+        start_timer("Decoding core...\n");
     for (q = 63; q >= 0; --q) {
         if (verbose and is_core)
             cout << "Decoding core's bit plane p = " << q << endl;
         uint64_t rawsize = read_bits(64);
-        vector<bool> raw;
-        high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
-        for (uint64_t i = 0; i < rawsize; ++i)
-            raw.push_back(read_bits(1));
-        decode_raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
-
-        vector<size_t> rle;
-        timenow = chrono::high_resolution_clock::now();
-        decode(rle);
-        decode_rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
-
-        int64_t raw_index = 0;
-        int64_t rle_value = -1;
-        int64_t rle_index = -1;
 
         size_t read_from_rle = 0;
         size_t read_from_raw = 0;
 
-        timenow = chrono::high_resolution_clock::now();
-        for (pointer = 0; pointer < size; ++pointer) {
-            uint64_t this_bit = 0;
-            if (current[pointer] == 0) { // Consume bit from RLE
-                if (rle_value == -1) {
-                    rle_index++;
-                    if (rle_index == int64_t(rle.size()))
-                        break;
-                    rle_value = rle[rle_index];
-                }
-                if (rle_value >= 1) {
-                    read_from_rle++;
-                    this_bit = 0;
-                    rle_value--;
-                }
-                else if (rle_value == 0) {
-                    read_from_rle++;
-                    this_bit = 1;
-                    rle_index++;
-                    if (rle_index == int64_t(rle.size()))
-                        break;
-                    rle_value = rle[rle_index];
-                }
+        if (all_raw) {
+            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            for (uint64_t pointer = 0; pointer < rawsize; ++pointer) {
+                current[pointer] |= read_bits(1) << q;
             }
-            else { // Consume bit from raw
-                if (raw_index == int64_t(raw.size()))
-                    break;
-                this_bit = raw[raw_index];
-                read_from_raw++;
-                raw_index++;
-            }
-            if (this_bit)
-                current[pointer] += this_bit << q;
+            unscramble_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+            vector<size_t> rle;
+            decode(rle);
         }
-        unscramble_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+        else {
+            vector<bool> raw;
+            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            for (uint64_t i = 0; i < rawsize; ++i)
+                raw.push_back(read_bits(1));
+            decode_raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+
+            vector<size_t> rle;
+            timenow = chrono::high_resolution_clock::now();
+            decode(rle);
+            decode_rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+
+            int64_t raw_index = 0;
+            int64_t rle_value = -1;
+            int64_t rle_index = -1;
+
+            timenow = chrono::high_resolution_clock::now();
+            for (pointer = 0; pointer < size; ++pointer) {
+                uint64_t this_bit = 0;
+                if (not all_raw and current[pointer] == 0) { // Consume bit from RLE
+                    if (rle_value == -1) {
+                        rle_index++;
+                        if (rle_index == int64_t(rle.size()))
+                            break;
+                        rle_value = rle[rle_index];
+                    }
+                    if (rle_value >= 1) {
+                        read_from_rle++;
+                        this_bit = 0;
+                        rle_value--;
+                    }
+                    else if (rle_value == 0) {
+                        read_from_rle++;
+                        this_bit = 1;
+                        rle_index++;
+                        if (rle_index == int64_t(rle.size()))
+                            break;
+                        rle_value = rle[rle_index];
+                    }
+                }
+                else { // Consume bit from raw
+                    if (raw_index == int64_t(raw.size()))
+                        break;
+                    this_bit = raw[raw_index];
+                    read_from_raw++;
+                    raw_index++;
+                }
+                if (this_bit)
+                    current[pointer] |= this_bit << q;
+            }
+            unscramble_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+        }
+
+        all_raw = read_bits(1);
 
         bool done = read_bits(1);
         if (done)
@@ -107,6 +124,8 @@ vector<uint64_t> decode_array(size_t size, bool is_core, bool verbose, bool debu
     }
     if (debug)
         cout << "decode_rle_time=" << decode_rle_time << ", decode_raw_time=" << decode_raw_time << ", unscramble_time=" << unscramble_time << endl;
+    if (verbose and is_core)
+        stop_timer();
     return current;
 }
 

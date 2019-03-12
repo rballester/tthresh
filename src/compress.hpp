@@ -41,6 +41,8 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
     // Compute and save maximum (in absolute value)
     /**********************************************/
 
+    if (is_core and verbose)
+        start_timer("Preliminaries... ");
     double maximum = 0;
     for (size_t i = 0; i < size; i++) {
         if (abs(c[i]) > maximum)
@@ -54,10 +56,26 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
 
     LLDOUBLE normsq = 0;
     vector<uint64_t> coreq(size);
-    for (size_t i = 0; i < size; ++i) {
-        coreq[i] = uint64_t(abs(c[i])*scale);
-        normsq += LLDOUBLE(coreq[i])*coreq[i];
+
+    // 128-bit float arithmetics are slow, so we split the computation of normsq into partial sums
+    size_t stepsize = 100;
+    size_t nsteps = ceil(size/double(stepsize));
+    size_t pos = 0;
+    for (size_t i = 0; i < nsteps; ++i) {
+        LDOUBLE partial_normsq = 0;
+        for (size_t j = 0; j < stepsize; ++j) {
+            coreq[pos] = uint64_t(abs(c[pos])*scale);
+            partial_normsq += LDOUBLE(abs(c[pos]))*abs(c[pos]);
+            pos++;
+            if (pos == size)
+                break;
+        }
+        normsq += partial_normsq;
+        if (pos == size)
+            break;
     }
+    normsq *= LLDOUBLE(scale)*LLDOUBLE(scale);
+
     LLDOUBLE sse = normsq;
     LDOUBLE last_eps = 1;
     LDOUBLE thresh = eps_target*eps_target*normsq;
@@ -68,11 +86,16 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
 
     vector<uint64_t> current(size, 0);
 
+    if (is_core and verbose)
+        stop_timer();
     bool done = false;
     total_bits = 0;
     size_t last_total_bits = total_bits;
     double eps_delta = 0, size_delta = 0, epsilon;
     int q;
+    bool all_raw = false;
+    if (verbose)
+        start_timer("Encoding core...\n");
     for (q = 63; q >= 0; --q) {
         if (verbose and is_core)
             cout << "Encoding core's bit plane p = " << q;
@@ -85,7 +108,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
         for (i = 0; i < size; ++i) {
             bool current_bit = ((coreq[i]>>q)&1UL);
             plane_ones += current_bit;
-            if (current[i] == 0) { // Feed to RLE
+            if (not all_raw and current[i] == 0) { // Feed to RLE
                 if (not current_bit)
                     counter++;
                 else {
@@ -152,12 +175,20 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
         last_total_bits = total_bits;
         last_eps = epsilon;
 
+        if (raw.size()/double(size) > 0.8)
+            all_raw = true;
+
+        write_bits(all_raw, 1);
+        total_bits++;
+
         write_bits(done, 1);
         total_bits++;
 
         if (done)
             break;
     }
+    if (verbose)
+        stop_timer();
 
     /****************************************/
     // Save signs of significant coefficients
@@ -175,7 +206,6 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
         eps_core = epsilon;
         total_bits_core = total_bits;
     }
-
     return current;
 }
 
@@ -262,6 +292,8 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     // Load input file into memory
     /*****************************/
 
+    if (verbose)
+        start_timer("Loading and casting input data... ");
     input_stream.seekg(0, ios::beg);
     char *in = new char[size * io_type_size];
     input_stream.read(in, size * io_type_size);
@@ -298,6 +330,8 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     datanorm = sqrt(datanorm);
     if (io_type_code != 4)
         delete[]in;
+    if (verbose)
+        stop_timer();
     if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;
 
     /**********************************************************************/
