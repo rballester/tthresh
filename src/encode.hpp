@@ -8,7 +8,7 @@
 
 /*
  The arithmetic loop (last part of this function) was provided by
-http://marknelson.us/2014/10/19/data-compression-with-arithmetic-coding
+https://marknelson.us/posts/2014/10/19/data-compression-with-arithmetic-coding.html
 under the following MIT License:
 
 Copyright (c) 2014 Mark Thomas Nelson
