@@ -99,7 +99,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
     for (q = 63; q >= 0; --q) {
         if (verbose and is_core)
             cout << "Encoding core's bit plane p = " << q;
-        vector<size_t> rle;
+        vector<uint64_t> rle;
         LDOUBLE plane_sse = 0;
         size_t plane_ones = 0;
         size_t counter = 0;
