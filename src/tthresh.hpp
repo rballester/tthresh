@@ -16,6 +16,10 @@
 using namespace std;
 using namespace std::chrono;
 
+#ifdef WIN32
+#include <iso646.h> //for 'and' 'or' ...
+#endif
+
 // Size (in bytes) for all I/O buffers
 #define CHUNK (1<<18)
 
