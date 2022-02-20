@@ -1,7 +1,6 @@
 /*
- * Copyright (c) 2016-2017, Rafael Ballester-Ripoll
- *                          (Visualization and MultiMedia Lab, University of Zurich),
- *                          rballester@ifi.uzh.ch
+ * Copyright (c) 2016-2022, Rafael Ballester-Ripoll
+ *                          Peter Lindstrom
  *
  * Licensed under the LGPLv3.0 (https://github.com/rballester/tthresh/blob/master/LICENSE)
  */
@@ -20,8 +19,7 @@
 #include <Eigen/Dense>
 #include <map>
 
-typedef __float128 LLDOUBLE;
-typedef __float80 LDOUBLE;
+typedef long double LDOUBLE;
 
 using namespace std;
 using namespace Eigen;
@@ -54,29 +52,24 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
     memcpy(&tmp, (void*)&scale, sizeof(scale));
     write_bits(tmp, 64);
 
-    LLDOUBLE normsq = 0;
+    // Vector of quantized core coefficients
     vector<uint64_t> coreq(size);
-
-    // 128-bit float arithmetics are slow, so we split the computation of normsq into partial sums
-    size_t stepsize = 100;
-    size_t nsteps = ceil(size/double(stepsize));
-    size_t pos = 0;
-    for (size_t i = 0; i < nsteps; ++i) {
-        LDOUBLE partial_normsq = 0;
-        for (size_t j = 0; j < stepsize; ++j) {
-            coreq[pos] = uint64_t(abs(c[pos])*scale);
-            partial_normsq += LDOUBLE(abs(c[pos]))*abs(c[pos]);
-            pos++;
-            if (pos == size)
-                break;
-        }
-        normsq += partial_normsq;
-        if (pos == size)
-            break;
+    for (size_t pos = 0; pos < size; ++pos) {
+        coreq[pos] = uint64_t(abs(c[pos])*scale);
     }
-    normsq *= LLDOUBLE(scale)*LLDOUBLE(scale);
 
-    LLDOUBLE sse = normsq;
+    // Kahan summation to compute the sum of squared core coefficients
+    LDOUBLE s0 = 0;
+    LDOUBLE s1 = 0;
+    for (size_t pos = 0; pos < size; ++pos) {
+        LDOUBLE t0 = s0;
+        s1 += LDOUBLE(c[pos])*c[pos];
+        s0 += s1;
+        s1 += t0 - s0;
+    }
+    LDOUBLE normsq = s0*scale*scale;
+
+    LDOUBLE sse = normsq;
     LDOUBLE last_eps = 1;
     LDOUBLE thresh = eps_target*eps_target*normsq;
 
