@@ -1,14 +1,14 @@
 # tthresh
 
-## Multidimensional Compression Using the Tucker Tensor Decomposition
+## TTHRESH: Tensor Compression for Multidimensional Visual Data
 
-This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](http://www.ifi.uzh.ch/en/vmml/people/current-staff/ballester.html) (rballester@ifi.uzh.ch) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data (R. Ballester-Ripoll, P. Lindstrom and R. Pajarola)](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**, and leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions.
+This is an **open-source C++ implementation** written by [Rafael Ballester-Ripoll](https://www.ie.edu/school-human-sciences-technology/we-are-hst/people/faculty/rafael-ballester-ripoll/) (rafael.ballester@ie.edu) of the compressor developed in [TTHRESH: Tensor Compression for Multidimensional Visual Data (R. Ballester-Ripoll, P. Lindstrom and R. Pajarola)](https://arxiv.org/pdf/1806.05952.pdf). It is intended for Cartesian grid data of **3 or more dimensions**, and leverages the higher-order singular value decomposition (HOSVD), a generalization of the SVD to 3 and more dimensions.
 
 If you use TTHRESH for a scientific publication, please cite one or both of these papers:
 
 - [*TTHRESH: Tensor Compression for Multidimensional Visual Data*](https://arxiv.org/abs/1806.05952):
-```@article{BLP:19, Author = {Ballester-Ripoll, Rafael and Lindstrom, Peter and Pajarola, Renato}, Journal = {IEEE Transaction on Visualization and Computer Graphics}, Keywords = {visualization, data compression, volume rendering, higher-order decompositions, tensor approximation}, Note = {arXiv:1806.05952}, Title = {TTHRESH: Tensor Compression for Multidimensional Visual Data}, Volume = {to appear}, Year = {2019}}```
-- [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html): ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1-14}}```
+```@article{BLP:19, Author = {Ballester-Ripoll, Rafael and Lindstrom, Peter and Pajarola, Renato}, Journal = {IEEE Transaction on Visualization and Computer Graphics}, Keywords = {visualization, data compression, volume rendering, higher-order decompositions, tensor approximation}, Title = {TTHRESH: Tensor Compression for Multidimensional Visual Data}, Volume = {26}, Issue = {9}, Pages = {2891--2903}, Year = {2019}}```
+- [*Lossy Volume Compression Using Tucker Truncation and Thresholding*](http://www.ifi.uzh.ch/en/vmml/publications/lossycompression.html): ```@article{BP:15, year={2015}, issn={0178-2789}, journal={The Visual Computer}, title={Lossy volume compression using {T}ucker truncation and thresholding}, publisher={Springer Berlin Heidelberg}, keywords={Tensor approximation; Data compression; Higher-order decompositions; Tensor rank reduction; Multidimensional data encoding}, author={Ballester-Ripoll, Rafael and Pajarola, Renato}, pages={1--14}}```
 
 For more information on the Tucker transform and tensor-based volume compression, check out our [slides](http://www.ifi.uzh.ch/dam/jcr:00000000-73a0-83b8-ffff-ffffd48b8a42/tensorapproximation.pdf).
 
