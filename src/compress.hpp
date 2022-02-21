@@ -116,9 +116,9 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
 
             if (current_bit) {
                 plane_sse += (LDOUBLE(coreq[i] - current[i]));
-                current[i] |= 1ULL<<q;
+                current[i] |= ((uint64_t)1) << q;
                 if (plane_ones%100 == 0) {
-                    LDOUBLE k = 1ULL<<q;
+                    LDOUBLE k = ((uint64_t)1) << q;
                     LDOUBLE sse_now = sse+(-2*k*plane_sse + k*k*plane_ones);
                     if (sse_now <= thresh) {
                         done = true;
@@ -133,7 +133,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
         if (verbose and is_core)
             cout << endl;
 
-        LDOUBLE k = 1ULL<<q;
+        LDOUBLE k = ((uint64_t)1) << q;
         sse += -2*k*plane_sse + k*k*plane_ones;
         rle.push_back(counter);
 
