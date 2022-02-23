@@ -12,6 +12,9 @@
 #include "Slice.hpp"
 #include <Eigen/Dense>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 using namespace std;
 using namespace Eigen;
 
@@ -49,7 +52,7 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
         }
         MatrixXd convolution = MatrixXd::Zero(slice.get_size(), U.rows()); // convolution*U convolves U along the columns
         #pragma omp parallel for
-        for (uint32_t i = 0; i < slice.get_size(); ++i) {
+        for (int32_t i = 0; i < slice.get_size(); ++i) {
             switch (slice.reduction) {
                 case Downsampling: {
                     convolution(i, slice.points[0]+i*slice.points[2]) = 1; // Delta kernel
@@ -124,7 +127,7 @@ void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
     #pragma omp parallel for
-    for (uint32_t i = 0; i < s[n-1]; i++)
+    for (int32_t i = 0; i < s[n-1]; i++)
         for (size_t j = 0; j < sprod[n-1]; j++)
             data[i*sprod[n-1] + j] = M_proj(i, j);
 }
@@ -178,7 +181,7 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
     data.resize(snewprod[n]);
     data.shrink_to_fit();
     #pragma omp parallel for
-    for (size_t i = 0; i < snewprod[n]; i++)
+    for (ptrdiff_t i = 0; i < snewprod[n]; i++)
         data[i] = M_proj(i/snewprod[n-1], i%snewprod[n-1]);
 }
 

@@ -42,8 +42,8 @@ struct {
 // If write_bits() has been called, call close_wbit() before write_stream()
 
 void open_write(string output_file) {
-    SET_BINARY_MODE(output_file.c_str());
-    zs.file = fopen(output_file.c_str(), "w");
+    //SET_BINARY_MODE(output_file.c_str());
+    zs.file = fopen(output_file.c_str(), "wb");
 }
 
 void write_stream(unsigned char *buf, size_t bytes_to_write)
@@ -92,8 +92,8 @@ void close_write() {
 
 void open_read(string input_file)
 {
-    SET_BINARY_MODE(input_file.c_str());
-    zs.file = fopen(input_file.c_str(), "r");
+    //SET_BINARY_MODE(input_file.c_str());
+    zs.file = fopen(input_file.c_str(), "rb");
     zs.rbytes = 0;
     zs.rbit = -1;
 }

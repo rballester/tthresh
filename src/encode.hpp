@@ -41,11 +41,11 @@ THE SOFTWARE.
 
 using namespace std;
 
-uint8_t CODE_VALUE_BITS = 32;
-uint64_t MAX_CODE = (1UL<<CODE_VALUE_BITS)-1;
-uint64_t ONE_FOURTH = (MAX_CODE+1UL)/4;
-uint64_t ONE_HALF = ONE_FOURTH*2;
-uint64_t THREE_FOURTHS = ONE_FOURTH*3;
+constexpr uint8_t CODE_VALUE_BITS = 32;
+constexpr uint64_t MAX_CODE = (((uint64_t)1) << CODE_VALUE_BITS)-1;
+constexpr uint64_t ONE_FOURTH = (MAX_CODE + ((uint64_t)1))/4;
+constexpr uint64_t ONE_HALF = ONE_FOURTH*2;
+constexpr uint64_t THREE_FOURTHS = ONE_FOURTH*3;
 
 uint64_t encoding_bits;
 
