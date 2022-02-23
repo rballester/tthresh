@@ -29,7 +29,7 @@ public:
 
     Slice(int32_t lower, int32_t stride, int32_t upper, bool downsample);  // Create a slice from its data
     Slice(string description); // Create a slice from its NumPy-like description
-    const uint32_t get_size(); // Number of elements encompassed by the slice
+    const int32_t get_size(); // Number of elements encompassed by the slice
     const bool is_standard(); // Whether it is the (0,1,-1) slice (equivalent to doing nothing)
     void update(uint32_t size);
 
@@ -87,7 +87,7 @@ Slice::Slice(string description) {
     assert(points[2] != 0);
 }
 
-const uint32_t Slice::get_size() {
+const int32_t Slice::get_size() {
     return ceil((points[1]-points[0])/double(points[2]));
 }
 

@@ -127,7 +127,7 @@ void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
     #pragma omp parallel for
-    for (int32_t i = 0; i < s[n-1]; i++)
+    for (int32_t i = 0; i < int32_t(s[n-1]); i++)
         for (size_t j = 0; j < sprod[n-1]; j++)
             data[i*sprod[n-1] + j] = M_proj(i, j);
 }
@@ -181,7 +181,7 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
     data.resize(snewprod[n]);
     data.shrink_to_fit();
     #pragma omp parallel for
-    for (ptrdiff_t i = 0; i < snewprod[n]; i++)
+    for (ptrdiff_t i = 0; i < ptrdiff_t(snewprod[n]); i++)
         data[i] = M_proj(i/snewprod[n-1], i%snewprod[n-1]);
 }
 
