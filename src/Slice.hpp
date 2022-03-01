@@ -27,7 +27,7 @@ public:
     int32_t max_upper = INT32_MAX;
     Reduction reduction = Downsampling;
 
-    Slice(int32_t lower, int32_t stride, int32_t upper, bool downsample);  // Create a slice from its data
+    Slice(int32_t lower, int32_t stride, int32_t upper);  // Create a slice from its data
     Slice(string description); // Create a slice from its NumPy-like description
     const int32_t get_size(); // Number of elements encompassed by the slice
     const bool is_standard(); // Whether it is the (0,1,-1) slice (equivalent to doing nothing)
@@ -36,11 +36,10 @@ public:
     friend ostream& operator<<(ostream& os, const Slice& slice);
 };
 
-Slice::Slice(int32_t lower, int32_t upper, int32_t stride, bool downsample=false) {
+Slice::Slice(int32_t lower, int32_t upper, int32_t stride) {
        points[0] = lower;
        points[1] = upper;
        points[2] = stride;
-       downsample = downsample; // If true, new samples are computed as averages; otherwise, no interpolation is used
 }
 
 Slice::Slice(string description) {
