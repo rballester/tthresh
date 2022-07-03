@@ -11,41 +11,87 @@
 #include <fstream>
 #include <vector>
 #include "encode.hpp"
-#include "tthresh.hpp"
 #include "tucker.hpp"
-#include "io.hpp"
 #include <math.h>
-#include <Eigen/Dense>
-#include <map>
-
-typedef long double LDOUBLE;
-
 
 using namespace std;
 using namespace Eigen;
 
-int qneeded;
-
 double rle_time = 0;
 double raw_time = 0;
 
-double price = -1, total_bits_core = -1, eps_core = -1;
-size_t total_bits = 0;
+int core_nplanes; // The factors will use the same number of planes as the core (plus/minus a constant)
 
-
-vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is_core, bool verbose=false) {
-
-    /**********************************************/
-    // Compute and save maximum (in absolute value)
-    /**********************************************/
+vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, bool is_core, bool verbose=false) {
 
     if (is_core and verbose)
         start_timer("Preliminaries... ");
+
+    /******************************************/
+    // Find last bit plane to encode losslessly
+    /******************************************/
+
     double maximum = 0;
-    for (size_t i = 0; i < size; i++) {
-        if (abs(c[i]) > maximum)
-            maximum = abs(c[i]);
+    for (size_t i = 0; i < size; ++i)
+        maximum = max(maximum, abs(c[i]));
+
+    int lastq;
+    size_t last_coef;
+    if (is_core) {
+        int msplane = static_cast<int>(std::floor(std::log2(maximum)));
+
+        int k = static_cast<int>(std::floor(std::log2(3 * sse / size) / 2)) - 1; // In the end, k will be the last encoded plane
+        k = std::max(k, -1023);  // ensure 2^k does not underflow to zero
+        k = max(k, msplane-63);
+
+        vector<double> g(size);
+        for (size_t i = 0; i < size; ++i)
+            g[i] = abs(c[i]);
+
+        long i = 0;  // Used to find the breakpoint
+        double err = 0;
+
+        // loop over bit planes
+        double m;
+        for (m = std::ldexp(1., k + 1); k < msplane; m *= 2, k++) {
+            bool done = false;
+            printf("k=%d m=%g=%a err=%e\n", k, m, m, err);
+            for (i = size-1; i >= 0; i--) {
+                // compute signed remainder, ri (truncated bit plane(s) in this step)
+                double ri = std::fmod(g[i], m);
+                if (ri > 0) {
+                    // compute error, ei, in current approximation
+                    double ei = abs(c[i]) - g[i];
+                    // compute SSE contribution of this truncation step
+                    double di = ri * (ri + 2 * ei);
+                    assert(di >= 0);
+                    // terminate if target SSE would be exceeded
+                    if (err + di > sse) {
+                        done = true;
+                        break;
+                    }
+                    // truncate bit plane(s)
+                    g[i] -= ri;
+                    // update accumulated error
+                    err += di;
+                }
+            }
+            if (done)
+                break;
+        }
+        last_coef = max(0, i);
+        lastq = max(0, 63-(msplane-k));
+        core_nplanes = 63-lastq + 1;
     }
+    else {
+        lastq = min(63, 63-nplanes+1);
+        last_coef = size-1;
+    }
+
+    /**************/
+    // Encode array
+    /**************/
+
     double scale = ldexp(1, 63-ilogb(maximum));
 
     uint64_t tmp;
@@ -54,92 +100,52 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
 
     // Vector of quantized core coefficients
     vector<uint64_t> coreq(size);
-    for (size_t pos = 0; pos < size; ++pos) {
+    for (size_t pos = 0; pos < size; ++pos)
         coreq[pos] = uint64_t(abs(c[pos])*scale);
-    }
-
-    // Kahan summation to compute the sum of squared core coefficients
-    LDOUBLE s0 = 0;
-    LDOUBLE s1 = 0;
-    for (size_t pos = 0; pos < size; ++pos) {
-        LDOUBLE t0 = s0;
-        s1 += LDOUBLE(c[pos])*c[pos];
-        s0 += s1;
-        s1 += t0 - s0;
-    }
-    LDOUBLE normsq = s0*scale*scale;
-
-    LDOUBLE sse = normsq;
-    LDOUBLE last_eps = 1;
-    LDOUBLE thresh = eps_target*eps_target*normsq;
-
-    /**************/
-    // Encode array
-    /**************/
 
     vector<uint64_t> current(size, 0);
 
     if (is_core and verbose)
         stop_timer();
     bool done = false;
-    total_bits = 0;
-    size_t last_total_bits = total_bits;
-    double eps_delta = 0, size_delta = 0, epsilon;
-    int q;
     bool all_raw = false;
     if (verbose)
         start_timer("Encoding core...\n");
-    for (q = 63; q >= 0; --q) {
+    for (int q = 63; q >= lastq; --q) {
         if (verbose and is_core)
             cout << "Encoding core's bit plane p = " << q;
         vector<uint64_t> rle;
-        LDOUBLE plane_sse = 0;
-        size_t plane_ones = 0;
         size_t counter = 0;
-        size_t i;
         vector<bool> raw;
-        for (i = 0; i < size; ++i) {
-            bool current_bit = ((coreq[i]>>q)&1UL);
-            plane_ones += current_bit;
+        for (size_t i = 0; i < size; ++i) {
+            bool current_bit = (coreq[i]>>q)&1UL;
             if (not all_raw and current[i] == 0) { // Feed to RLE
-                if (not current_bit)
-                    counter++;
-                else {
+                if (current_bit) {
                     rle.push_back(counter);
                     counter = 0;
                 }
+                else
+                    counter++;
             }
-            else { // Feed to raw stream
-                ++total_bits;
+            else // Feed to raw stream
                 raw.push_back(current_bit);
-            }
 
-            if (current_bit) {
-                plane_sse += (LDOUBLE(coreq[i] - current[i]));
+            if (current_bit)
                 current[i] |= ((uint64_t)1) << q;
-                if (plane_ones%100 == 0) {
-                    LDOUBLE k = ((uint64_t)1) << q;
-                    LDOUBLE sse_now = sse+(-2*k*plane_sse + k*k*plane_ones);
-                    if (sse_now <= thresh) {
-                        done = true;
-                        if (verbose)
-                            cout << " <- breakpoint: coefficient " << i;
-                        break;
-                    }
-                }
-
+            if (q == lastq and i >= last_coef) {
+                done = true;
+                if (verbose)
+                    cout << " <- breakpoint: coefficient " << i;
+                break;
             }
         }
         if (verbose and is_core)
             cout << endl;
 
-        LDOUBLE k = ((uint64_t)1) << q;
-        sse += -2*k*plane_sse + k*k*plane_ones;
         rle.push_back(counter);
 
         uint64_t rawsize = raw.size();
         write_bits(rawsize, 64);
-        total_bits += 64;
 
         {
             high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
@@ -149,33 +155,15 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
         }
         {
             high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
-            uint64_t this_part = encode(rle);
+            encode(rle);
             rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
-            total_bits += this_part;
         }
-
-        epsilon = sqrt(double(sse/normsq));
-        if (last_total_bits > 0) {
-            if (is_core) {
-                size_delta = (total_bits - last_total_bits) / double(last_total_bits);
-                eps_delta = (last_eps - epsilon) / epsilon;
-            }
-            else {
-                if ((total_bits/total_bits_core) / (epsilon/eps_core) >= price)
-                    done = true;
-            }
-        }
-        last_total_bits = total_bits;
-        last_eps = epsilon;
 
         if (raw.size()/double(size) > 0.8)
             all_raw = true;
 
         write_bits(all_raw, 1);
-        total_bits++;
-
         write_bits(done, 1);
-        total_bits++;
 
         if (done)
             break;
@@ -187,18 +175,10 @@ vector<uint64_t> encode_array(double* c, size_t size, double eps_target, bool is
     // Save signs of significant coefficients
     /****************************************/
 
-    for (size_t i = 0; i < size; ++i) {
-        if (current[i] > 0) {
+    for (size_t i = 0; i < size; ++i)
+        if (current[i] > 0)
             write_bits((c[i] > 0), 1);
-            total_bits++;
-        }
-    }
 
-    if (is_core) {
-        price = size_delta / eps_delta;
-        eps_core = epsilon;
-        total_bits_core = total_bits;
-    }
     return current;
 }
 
@@ -358,18 +338,15 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     vector<MatrixXd> Us(n); // Tucker factor matrices
     hosvd_compress(c, Us, verbose);
 
-    if (verbose) {
+    if (verbose)
         stop_timer();
-//        cout << "RLE time (ms):" << rle_time << endl;
-//        cout << "Raw time (ms):" << raw_time << endl;
-    }
 
     /**************************/
     // Encode and save the core
     /**************************/
 
     open_wbit();
-    vector<uint64_t> current = encode_array(c, size, epsilon, true, verbose);
+    vector<uint64_t> current = encode_array(c, size, sse, 0, true, verbose);
     close_wbit();
 
     /*******************************/
@@ -418,18 +395,15 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     }
     write_stream(reinterpret_cast<unsigned char*> (&r[0]), n*sizeof(r[0]));
 
-    for (uint8_t i = 0; i < n; ++i) {
+    for (uint8_t i = 0; i < n; ++i)
         write_stream(reinterpret_cast<uint8_t*> (slicenorms[i].data()), r[i]*sizeof(double));
-    }
 
-    vector<MatrixXd> Uweighteds;
     open_wbit();
     for (int dim = 0; dim < n; ++dim) {
         MatrixXd Uweighted = Us[dim].leftCols(r[dim]);
         for (size_t col = 0; col < r[dim]; ++col)
             Uweighted.col(col) = Uweighted.col(col)*slicenorms[dim][col];
-        Uweighteds.push_back(Uweighted);
-        encode_array(Uweighted.data(), s[dim]*r[dim], 0, false);//*(s[i]*s[i]/sprod[n]));  // TODO flatten in F order?
+        encode_array(Uweighted.data(), s[dim]*r[dim], 0, core_nplanes-3, false);  // Using the same n. planes as the core minus a constant seems to be a good heuristic
     }
     close_wbit();
     close_write();
