@@ -11,82 +11,118 @@
 #include <fstream>
 #include <vector>
 #include "encode.hpp"
+#include "tthresh.hpp"
 #include "tucker.hpp"
+#include "io.hpp"
 #include <math.h>
+#include <Eigen/Dense>
+#include <map>
+
+typedef long double LDOUBLE;
+
 
 using namespace std;
 using namespace Eigen;
 
+int qneeded;
+
 double rle_time = 0;
 double raw_time = 0;
 
-int core_nplanes; // The factors will use the same number of planes as the core (plus/minus a constant)
+double core_price = -1;
+int core_nplanes;
+size_t total_bits = 0;
 
 vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, bool is_core, bool verbose=false) {
-
-    if (is_core and verbose)
-        start_timer("Preliminaries... ");
 
     /******************************************/
     // Find last bit plane to encode losslessly
     /******************************************/
 
+    if (is_core and verbose)
+        start_timer("Preliminaries... ");
+
     double maximum = 0;
-    for (size_t i = 0; i < size; ++i)
+    vector<double> g(size);
+    double normsq = 0;
+    for (size_t i = 0; i < size; ++i) {
         maximum = max(maximum, abs(c[i]));
+        g[i] = abs(c[i]);
+        normsq += c[i]*c[i];
+    }
 
-    int lastq;
-    size_t last_coef;
+    int msplane = static_cast<int>(std::floor(std::log2(maximum)));
+
+    int k;
     if (is_core) {
-        int msplane = static_cast<int>(std::floor(std::log2(maximum)));
-
-        int k = static_cast<int>(std::floor(std::log2(3 * sse / size) / 2)) - 1; // In the end, k will be the last encoded plane
+        k = static_cast<int>(std::floor(std::log2(3 * sse / size) / 2)) - 1; // In the end, k will be the last encoded plane
         k = std::max(k, -1023);  // ensure 2^k does not underflow to zero
         k = max(k, msplane-63);
+    }
+    else
+        k = msplane-nplanes+0;
+    
+    double plane_sse = 0;  // Only for factors: total SSE incurred by truncating the current plane
+    vector<double> plane_sses; // Only for factors: SSE incurred by each plane
+    long i = 0; // Used to find the breakpoint
+    double incurred_sse = 0; // Only for core: total SSE incurred
+    
 
-        vector<double> g(size);
-        for (size_t i = 0; i < size; ++i)
-            g[i] = abs(c[i]);
-
-        long i = 0;  // Used to find the breakpoint
-        double err = 0;
-
-        // loop over bit planes
-        double m;
-        for (m = std::ldexp(1., k + 1); k < msplane; m *= 2, k++) {
-            bool done = false;
-            printf("k=%d m=%g=%a err=%e\n", k, m, m, err);
-            for (i = size-1; i >= 0; i--) {
-                // compute signed remainder, ri (truncated bit plane(s) in this step)
-                double ri = std::fmod(g[i], m);
-                if (ri > 0) {
-                    // compute error, ei, in current approximation
-                    double ei = abs(c[i]) - g[i];
-                    // compute SSE contribution of this truncation step
-                    double di = ri * (ri + 2 * ei);
-                    assert(di >= 0);
-                    // terminate if target SSE would be exceeded
-                    if (err + di > sse) {
-                        done = true;
-                        break;
-                    }
-                    // truncate bit plane(s)
-                    g[i] -= ri;
-                    // update accumulated error
-                    err += di;
+    // loop over bit planes
+    double m;
+    for (m = std::ldexp(1., k + 1); k < msplane; m *= 2, k++) {
+        bool done = false;
+        // printf("k=%d m=%g=%a err=%e\n", k, m, m, incurred_sse);
+        plane_sse = 0;
+        for (i = size-1; i >= 0; i--) {
+            // compute signed remainder, ri (truncated bit plane(s) in this step)
+            double ri = std::fmod(g[i], m);
+            if (ri > 0) {
+                // compute error, ei, in current approximation
+                double ei = abs(c[i]) - g[i];
+                // compute SSE contribution of this truncation step
+                double di = ri * (ri + 2 * ei);
+                assert(di >= 0);
+                plane_sse += di;
+                // terminate if target SSE would be exceeded
+                if (is_core and incurred_sse + di > sse) {
+                    done = true;
+                    break;
                 }
+                // truncate bit plane(s)
+                g[i] -= ri;
+                // update accumulated error
+                incurred_sse += di;
             }
-            if (done)
-                break;
         }
-        last_coef = max(0, i);
+        plane_sses.push_back(plane_sse);
+        if (done)
+            break;
+    }
+    size_t last_coef = max(0, i);
+
+    double k_sse = 0;  // SSE avoided by encoding plane k until breakpoint
+    for (; i >= 0; i--) {
+        double ri = std::fmod(g[i], m);
+        if (ri > 0) {
+            double ei = abs(c[i]) - g[i];
+            double di = ri * (ri + 2 * ei);
+            k_sse += di;
+        }
+    }
+
+    // We want the cumulative plane sse's, from the right (msplane) to the left, to compute the factor price
+    vector<double> cumulative_plane_sses(plane_sses);
+    for (int i = cumulative_plane_sses.size()-2; i >= 0; --i)
+       cumulative_plane_sses[i] += cumulative_plane_sses[i+1];
+
+    int lastq;
+    if (is_core) {
         lastq = max(0, 63-(msplane-k));
         core_nplanes = 63-lastq + 1;
     }
-    else {
-        lastq = min(63, 63-nplanes+1);
-        last_coef = size-1;
-    }
+    else
+        lastq = 0; // For factors, we stop based on price, not k
 
     /**************/
     // Encode array
@@ -108,6 +144,9 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
     if (is_core and verbose)
         stop_timer();
     bool done = false;
+    total_bits = 0;
+    size_t last_total_bits = total_bits;
+    double core_size_delta = 0;
     bool all_raw = false;
     if (verbose)
         start_timer("Encoding core...\n");
@@ -146,24 +185,44 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
 
         uint64_t rawsize = raw.size();
         write_bits(rawsize, 64);
+        total_bits += 64;
 
         {
             high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
             for (size_t i = 0; i < raw.size(); ++i)
                 write_bits(raw[i], 1);
+            total_bits += raw.size();
             raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
         }
         {
             high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
-            encode(rle);
+            uint64_t this_part = encode(rle);
             rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+            total_bits += this_part;
         }
+
+        if (last_total_bits > 0) {
+            if (is_core)
+                core_size_delta = total_bits - last_total_bits;
+            // The matrices are done when the price of the current bit plane exceeds the price paid when encoding the core
+            else {
+                double factor_size_delta = total_bits - last_total_bits;
+                double factor_k_sse = plane_sses[plane_sses.size() - 1 - (63-q)];
+                double factor_incurred_sse = cumulative_plane_sses[plane_sses.size() - 1 - (63-q)];
+                double factor_eps_delta = sqrt(factor_k_sse / (normsq - factor_incurred_sse));
+                
+                if (factor_size_delta / factor_eps_delta >= core_price/n)
+                    done = true;
+            }
+        }
+        last_total_bits = total_bits;
 
         if (raw.size()/double(size) > 0.8)
             all_raw = true;
 
         write_bits(all_raw, 1);
         write_bits(done, 1);
+        total_bits += 2;
 
         if (done)
             break;
@@ -175,10 +234,17 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
     // Save signs of significant coefficients
     /****************************************/
 
-    for (size_t i = 0; i < size; ++i)
-        if (current[i] > 0)
+    for (size_t i = 0; i < size; ++i) {
+        if (current[i] > 0) {
             write_bits((c[i] > 0), 1);
+            total_bits++;
+        }
+    }
 
+    if (is_core) {
+        double core_eps_delta = sqrt(k_sse / (normsq - incurred_sse));
+        core_price = core_size_delta / core_eps_delta;
+    }
     return current;
 }
 
@@ -363,11 +429,9 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         slicenorms[dim].setZero();
     }
     for (size_t i = 0; i < size; ++i) {
-        if (current[i] > 0) {
-            for (int dim = 0; dim < n; ++dim) {
+        if (current[i] > 0)
+            for (int dim = 0; dim < n; ++dim)
                 slicenorms[dim][indices[dim]] += double(current[i])*current[i];
-            }
-        }
         indices[0]++;
         int pos = 0;
         while (indices[pos] >= s[pos] and pos < n-1) {
@@ -403,7 +467,7 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         MatrixXd Uweighted = Us[dim].leftCols(r[dim]);
         for (size_t col = 0; col < r[dim]; ++col)
             Uweighted.col(col) = Uweighted.col(col)*slicenorms[dim][col];
-        encode_array(Uweighted.data(), s[dim]*r[dim], 0, core_nplanes-3, false);  // Using the same n. planes as the core minus a constant seems to be a good heuristic
+        encode_array(Uweighted.data(), s[dim]*r[dim], 0, core_nplanes, false);  //*(s[i]*s[i]/sprod[n]));
     }
     close_wbit();
     close_write();
