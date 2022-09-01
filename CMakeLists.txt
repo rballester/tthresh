@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 2.8.12)
 project(tthresh CXX)
 #set(CMAKE_CXX_STANDARD 11)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY VALUE Release)
+endif()
+
 # External dependencies
 
 # OpenMP
