@@ -35,6 +35,7 @@ int main(int argc, char *argv[])
     string io_type;
     vector<string> output_flags;
     vector<Slice> cutout;
+    dimensions d;
 
     if (argc == 1) {
         print_usage();
@@ -160,7 +161,7 @@ int main(int argc, char *argv[])
                     display_error("Unrecognized sizes: must be positive integers");
             }
             for (uint8_t dim = 0; dim < exponent; ++dim)
-                s.push_back(base);
+                d.s.push_back(base);
         } else if (mode == target_mode) {
             if (not is_number(arg))
                 display_error("Numeric argument expected");
@@ -183,7 +184,7 @@ int main(int argc, char *argv[])
             display_error("Specify an I/O type (-t)");
         if (not sizes_flag or target_value < 0)
             display_error("Specify both data sizes (-s) and accuracy target (-e, -r, or -p)");
-        if (s.size() < 3)
+        if (d.s.size() < 3)
             display_error("Specify 3 or more integer sizes after -s (C memory order)");
     }
     else if (skip_bytes_flag)
@@ -219,9 +220,9 @@ int main(int argc, char *argv[])
 
     double *data = NULL;
     if (input_flag)
-        data = compress(input_file, compressed_file, io_type, target, target_value, skip_bytes, verbose_flag, debug_flag);
+        data = compress(d, input_file, compressed_file, io_type, target, target_value, skip_bytes, verbose_flag, debug_flag);
     if (output_flag)
-        decompress(compressed_file, output_file, data, cutout, autocrop_flag, verbose_flag, debug_flag);
+        decompress(d, compressed_file, output_file, data, cutout, autocrop_flag, verbose_flag, debug_flag);
     delete[] (data-skip_bytes);
 
     return 0;

@@ -41,6 +41,11 @@ using namespace std;
 
 void decode(vector<size_t>& rle) {
 
+  constexpr uint64_t MAX_CODE = (((uint64_t)1) << CODE_VALUE_BITS)-1;
+  constexpr uint64_t ONE_FOURTH = (MAX_CODE + ((uint64_t)1))/4;
+  constexpr uint64_t ONE_HALF = ONE_FOURTH*2;
+  constexpr uint64_t THREE_FOURTHS = ONE_FOURTH*3;
+
 //    open_rbit();
 
     //*********

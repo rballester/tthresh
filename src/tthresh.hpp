@@ -31,14 +31,18 @@ enum Mode { none_mode, input_mode, compressed_mode, output_mode, io_type_mode, s
 enum Target { eps, rmse, psnr };
 
 // Tensor dimensionality, ranks and sizes. They are only set, never modified
-uint8_t n;
-vector<uint32_t> r;
-vector<size_t> rprod;
-vector<uint32_t> s, snew;
-vector<size_t> sprod, snewprod;
+
+typedef struct {
+    uint8_t n;
+    vector<uint32_t> r;
+    vector<size_t> rprod;
+    vector<uint32_t> s, snew;
+    vector<size_t> sprod, snewprod;
+} dimensions;
 
 void cumulative_products(vector<uint32_t>& in, vector<size_t>& out) {
-    uint8_t n = s.size();
+    // uint8_t n = d.s.size();
+    uint8_t n = in.size();
     out = vector<size_t> (n+1); // Cumulative size products. The i-th element contains s[0]*...*s[i-1]
     out[0] = 1;
     for (uint8_t i = 0; i < n; ++i)

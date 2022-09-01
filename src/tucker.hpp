@@ -94,13 +94,13 @@ void unproject(MatrixXd& M, MatrixXd& U, MatrixXd& M_proj, Slice slice) {
 
 // Reads a tensor in the buffer data of size s, and compresses it.
 // The factor matrices are output parameters
-void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
+void hosvd_compress(dimensions d, double *data, vector<MatrixXd>& Us, bool verbose)
 {
-    char n = s.size();
+    char n = d.s.size();
 
     // First unfolding: special case (elements are already arranged as we want)
     if (verbose) cout << "\tUnfold (1)... " << flush;
-    MatrixXd M = MatrixXd::Map(data, s[0], sprod[n]/s[0]);
+    MatrixXd M = MatrixXd::Map(data, d.s[0], d.sprod[n]/d.s[0]);
     MatrixXd M_proj;
     if (verbose) cout << "Project (1)..." << flush;
     project(M, Us[0], M_proj);
@@ -111,13 +111,13 @@ void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
     // Output: matrix of size s[dim] x (s[0] * ... * s[dim-1] * s[dim+1] * ... * s[N])
     for (uint8_t dim = 1; dim < n; ++dim) {
         if (verbose) cout << "\tUnfold (" << dim+1 << ")... " << flush;
-        M = MatrixXd(s[dim], sprod[n]/s[dim]); // dim-th factor matrix
+        M = MatrixXd(d.s[dim], d.sprod[n]/d.s[dim]); // dim-th factor matrix
         #pragma omp parallel for
         for (int64_t j = 0; j < M_proj.cols(); ++j) {
-            uint32_t write_i = (j/sprod[dim-1]) % s[dim];
-            size_t base_write_j = j%sprod[dim-1] + j/(sprod[dim-1]*s[dim])*sprod[dim];
+            uint32_t write_i = (j/d.sprod[dim-1]) % d.s[dim];
+            size_t base_write_j = j%d.sprod[dim-1] + j/(d.sprod[dim-1]*d.s[dim])*d.sprod[dim];
             for (int32_t i = 0; i < M_proj.rows(); ++i)
-                M(write_i, base_write_j + i*sprod[dim-1]) = M_proj(i, j);
+                M(write_i, base_write_j + i*d.sprod[dim-1]) = M_proj(i, j);
         }
         if (verbose) cout << "\tProject (" << dim+1 << ")... " << flush;
         project(M, Us[dim], M_proj);
@@ -127,22 +127,22 @@ void hosvd_compress(double *data, vector<MatrixXd>& Us, bool verbose)
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
     #pragma omp parallel for
-    for (int32_t i = 0; i < int32_t(s[n-1]); i++)
-        for (size_t j = 0; j < sprod[n-1]; j++)
-            data[i*sprod[n-1] + j] = M_proj(i, j);
+    for (int32_t i = 0; i < int32_t(d.s[n-1]); i++)
+        for (size_t j = 0; j < d.sprod[n-1]; j++)
+            data[i*d.sprod[n-1] + j] = M_proj(i, j);
 }
 
 // Reads a tensor in the buffer data of size s, and decompresses it in-place
-void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, vector<Slice>& cutout)
+void hosvd_decompress(dimensions d, vector<double>& data, vector<MatrixXd>& Us, bool verbose, vector<Slice>& cutout)
 {
-    if (rprod[n] == 0) { // Extreme case: 0 ranks
-        data = vector<double> (snewprod[n], 0); // Produce a 0 reconstruction of the expected size, and leave
+    if (d.rprod[d.n] == 0) { // Extreme case: 0 ranks
+        data = vector<double> (d.snewprod[d.n], 0); // Produce a 0 reconstruction of the expected size, and leave
         return;
     }
 
     // First unfolding: special case (elements are already arranged as we want)
     if (verbose) cout << "\tUnfold (1)... " << flush;
-    MatrixXd M = MatrixXd::Map(data.data(), r[0], rprod[n]/r[0]);
+    MatrixXd M = MatrixXd::Map(data.data(), d.r[0], d.rprod[d.n]/d.r[0]);
     MatrixXd M_proj;
     if (verbose) {
         cout << "\tUnproject (" << 1 << ")";
@@ -156,15 +156,15 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
     // Remaining unfoldings: all of them go matrix -> matrix
     // Input: matrix of size s[dim-1] x (s[0] * ... * s[dim-2] * s[dim] * ... * s[N])
     // Output: matrix of size s[dim] x (s[0] * ... * s[dim-1] * s[dim+1] * ... * s[N])
-    for (uint8_t dim = 1; dim < n; ++dim) {
+    for (uint8_t dim = 1; dim < d.n; ++dim) {
         if (verbose) cout << "\tUnfold (" << dim+1 << ")... " << flush;
-        M = MatrixXd(r[dim], snewprod[dim]*rprod[n]/rprod[dim+1]); // dim-th factor matrix
+        M = MatrixXd(d.r[dim], d.snewprod[dim]*d.rprod[d.n]/d.rprod[dim+1]); // dim-th factor matrix
         #pragma omp parallel for
         for (int64_t j = 0; j < M_proj.cols(); ++j) {
-            uint32_t write_i = (j/snewprod[dim-1]) % r[dim];
-            size_t base_write_j = j%snewprod[dim-1] + j/(snewprod[dim-1]*r[dim])*snewprod[dim];
+            uint32_t write_i = (j/d.snewprod[dim-1]) % d.r[dim];
+            size_t base_write_j = j%d.snewprod[dim-1] + j/(d.snewprod[dim-1]*d.r[dim])*d.snewprod[dim];
             for (int32_t i = 0; i < M_proj.rows(); ++i)
-                M(write_i, base_write_j + i*snewprod[dim-1]) = M_proj(i, j);
+                M(write_i, base_write_j + i*d.snewprod[dim-1]) = M_proj(i, j);
         }
         if (verbose) {
             cout << "\tUnproject (" << dim+1 << ")";
@@ -178,11 +178,11 @@ void hosvd_decompress(vector<double>& data, vector<MatrixXd>& Us, bool verbose, 
 
     // We fold back from matrix into ND tensor
     if (verbose) cout << "\tFold... " << flush << endl;
-    data.resize(snewprod[n]);
+    data.resize(d.snewprod[d.n]);
     data.shrink_to_fit();
     #pragma omp parallel for
-    for (ptrdiff_t i = 0; i < ptrdiff_t(snewprod[n]); i++)
-        data[i] = M_proj(i/snewprod[n-1], i%snewprod[n-1]);
+    for (ptrdiff_t i = 0; i < ptrdiff_t(d.snewprod[d.n]); i++)
+        data[i] = M_proj(i/d.snewprod[d.n-1], i%d.snewprod[d.n-1]);
 }
 
 #endif // TUCKER_HPP

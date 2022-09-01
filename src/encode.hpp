@@ -35,17 +35,13 @@ THE SOFTWARE.
 #ifndef __ENCODE_HPP__
 #define __ENCODE_HPP__
 
+#define CODE_VALUE_BITS 32
+
 #include <map>
 #include <iterator>
 #include "io.hpp"
 
 using namespace std;
-
-constexpr uint8_t CODE_VALUE_BITS = 32;
-constexpr uint64_t MAX_CODE = (((uint64_t)1) << CODE_VALUE_BITS)-1;
-constexpr uint64_t ONE_FOURTH = (MAX_CODE + ((uint64_t)1))/4;
-constexpr uint64_t ONE_HALF = ONE_FOURTH*2;
-constexpr uint64_t THREE_FOURTHS = ONE_FOURTH*3;
 
 uint64_t encoding_bits;
 
@@ -63,6 +59,11 @@ inline void put_bit_plus_pending(bool bit, int& pending_bits)
 }
 
 uint64_t encode(vector<uint64_t>& rle) {
+
+  constexpr uint64_t MAX_CODE = (((uint64_t)1) << CODE_VALUE_BITS)-1;
+  constexpr uint64_t ONE_FOURTH = (MAX_CODE + ((uint64_t)1))/4;
+  constexpr uint64_t ONE_HALF = ONE_FOURTH*2;
+  constexpr uint64_t THREE_FOURTHS = ONE_FOURTH*3;
 
     // Build table of frequencies/probability intervals
     // key -> (count, lower bound)

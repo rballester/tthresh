@@ -24,22 +24,29 @@ typedef long double LDOUBLE;
 using namespace std;
 using namespace Eigen;
 
-int qneeded;
+// int qneeded;
 
-double rle_time = 0;
-double raw_time = 0;
+// double rle_time = 0;
+// double raw_time = 0;
 
-double core_price = -1;
-int core_nplanes;
-size_t total_bits = 0;
+typedef struct {
+    bool is_core;
+    double core_price;
+    int core_nplanes;
+} core_struct;
 
-vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, bool is_core, bool verbose=false) {
+// double core_price = -1;
+// int core_nplanes;
+
+vector<uint64_t> encode_array(dimensions d, double* c, size_t size, double sse, core_struct& core_info, bool verbose=false) {
+
+    size_t total_bits = 0;
 
     /******************************************/
     // Find last bit plane to encode losslessly
     /******************************************/
 
-    if (is_core and verbose)
+    if (core_info.is_core and verbose)
         start_timer("Preliminaries... ");
 
     double maximum = 0;
@@ -54,13 +61,13 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
     int msplane = static_cast<int>(std::floor(std::log2(maximum)));
 
     int k;
-    if (is_core) {
+    if (core_info.is_core) {
         k = static_cast<int>(std::floor(std::log2(3 * sse / size) / 2)) - 1; // In the end, k will be the last encoded plane
         k = std::max(k, -1023);  // ensure 2^k does not underflow to zero
         k = max(k, msplane-63);
     }
     else
-        k = msplane-nplanes+0;
+        k = msplane-core_info.core_nplanes+0;
     
     double plane_sse = 0;  // Only for factors: total SSE incurred by truncating the current plane
     vector<double> plane_sses; // Only for factors: SSE incurred by each plane
@@ -85,7 +92,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
                 assert(di >= 0);
                 plane_sse += di;
                 // terminate if target SSE would be exceeded
-                if (is_core and incurred_sse + di > sse) {
+                if (core_info.is_core and incurred_sse + di > sse) {
                     done = true;
                     break;
                 }
@@ -117,9 +124,9 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
        cumulative_plane_sses[i] += cumulative_plane_sses[i+1];
 
     int lastq;
-    if (is_core) {
+    if (core_info.is_core) {
         lastq = max(0, 63-(msplane-k));
-        core_nplanes = 63-lastq + 1;
+        core_info.core_nplanes = 63-lastq + 1;
     }
     else
         lastq = 0; // For factors, we stop based on price, not k
@@ -141,7 +148,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
 
     vector<uint64_t> current(size, 0);
 
-    if (is_core and verbose)
+    if (core_info.is_core and verbose)
         stop_timer();
     bool done = false;
     total_bits = 0;
@@ -151,7 +158,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
     if (verbose)
         start_timer("Encoding core...\n");
     for (int q = 63; q >= lastq; --q) {
-        if (verbose and is_core)
+        if (verbose and core_info.is_core)
             cout << "Encoding core's bit plane p = " << q;
         vector<uint64_t> rle;
         size_t counter = 0;
@@ -178,7 +185,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
                 break;
             }
         }
-        if (verbose and is_core)
+        if (verbose and core_info.is_core)
             cout << endl;
 
         rle.push_back(counter);
@@ -188,21 +195,21 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
         total_bits += 64;
 
         {
-            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            // high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
             for (size_t i = 0; i < raw.size(); ++i)
                 write_bits(raw[i], 1);
             total_bits += raw.size();
-            raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+            // raw_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
         }
         {
-            high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
+            // high_resolution_clock::time_point timenow = chrono::high_resolution_clock::now();
             uint64_t this_part = encode(rle);
-            rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
+            // rle_time += std::chrono::duration_cast<std::chrono::microseconds>(chrono::high_resolution_clock::now() - timenow).count()/1000.;
             total_bits += this_part;
         }
 
         if (last_total_bits > 0) {
-            if (is_core)
+            if (core_info.is_core)
                 core_size_delta = total_bits - last_total_bits;
             // The matrices are done when the price of the current bit plane exceeds the price paid when encoding the core
             else {
@@ -211,7 +218,7 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
                 double factor_incurred_sse = cumulative_plane_sses[plane_sses.size() - 1 - (63-q)];
                 double factor_eps_delta = sqrt(factor_k_sse / (normsq - factor_incurred_sse));
                 
-                if (factor_size_delta / factor_eps_delta >= core_price/n)
+                if (factor_size_delta / factor_eps_delta >= core_info.core_price/d.n)
                     done = true;
             }
         }
@@ -241,29 +248,29 @@ vector<uint64_t> encode_array(double* c, size_t size, double sse, int nplanes, b
         }
     }
 
-    if (is_core) {
+    if (core_info.is_core) {
         double core_eps_delta = sqrt(k_sse / (normsq - incurred_sse));
-        core_price = core_size_delta / core_eps_delta;
+        core_info.core_price = core_size_delta / core_eps_delta;
     }
     return current;
 }
 
-double *compress(string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
+double *compress(dimensions d, string input_file, string compressed_file, string io_type, Target target, double target_value, size_t skip_bytes, bool verbose=false, bool debug=false) {
 
-    n = s.size();
+    d.n = d.s.size();
     if (verbose) {
-        cout << endl << "/***** Compression: " << to_string(n) << "D tensor of size " << s[0];
-        for (uint8_t i = 1; i < n; ++i)
-            cout << " x " << s[i];
+        cout << endl << "/***** Compression: " << to_string(d.n) << "D tensor of size " << d.s[0];
+        for (uint8_t i = 1; i < d.n; ++i)
+            cout << " x " << d.s[i];
         cout << " *****/" << endl << endl;
     }
-    cumulative_products(s, sprod);
+    cumulative_products(d.s, d.sprod);
 
     /***********************/
     // Check input data type
     /***********************/
 
-    size_t size = sprod[n]; // Total number of tensor elements
+    size_t size = d.sprod[d.n]; // Total number of tensor elements
     uint8_t io_type_size, io_type_code;
     if (io_type == "uchar") {
         io_type_size = sizeof(unsigned char);
@@ -303,9 +310,9 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
         cout << "Invalid file size: expected ";
         if (skip_bytes > 0)
             cout << skip_bytes << " + ";
-        cout << "(" << s[0];
-        for (uint8_t i = 1; i < n; ++i)
-            cout << "*" << s[i];
+        cout << "(" << d.s[0];
+        for (uint8_t i = 1; i < d.n; ++i)
+            cout << "*" << d.s[i];
         cout << ")*" << int(io_type_size) << " = " << expected_size << " bytes, but found " << fsize << " bytes";
         if (expected_size > fsize)
             cout << " (" << expected_size / double (fsize) << " times too small)";
@@ -323,8 +330,8 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     /********************************************/
 
     open_write(compressed_file.c_str());
-    write_stream(reinterpret_cast < unsigned char *> (&n), sizeof(n));
-    write_stream(reinterpret_cast < unsigned char *> (&s[0]), n*sizeof(s[0]));
+    write_stream(reinterpret_cast < unsigned char *> (&d.n), sizeof(d.n));
+    write_stream(reinterpret_cast < unsigned char *> (&d.s[0]), d.n*sizeof(d.s[0]));
     write_stream(reinterpret_cast < unsigned char *> (&io_type_code), sizeof(io_type_code));
 
     /*****************************/
@@ -401,8 +408,8 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
 
     memcpy(c, data, size * sizeof(double));
 
-    vector<MatrixXd> Us(n); // Tucker factor matrices
-    hosvd_compress(c, Us, verbose);
+    vector<MatrixXd> Us(d.n); // Tucker factor matrices
+    hosvd_compress(d, c, Us, verbose);
 
     if (verbose)
         stop_timer();
@@ -411,8 +418,11 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
     // Encode and save the core
     /**************************/
 
+    core_struct core_info;
+    core_info.is_core = true;
+    core_info.core_price = -1;
     open_wbit();
-    vector<uint64_t> current = encode_array(c, size, sse, 0, true, verbose);
+    vector<uint64_t> current = encode_array(d, c, size, sse, core_info, verbose);
     close_wbit();
 
     /*******************************/
@@ -421,30 +431,30 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
 
     if (verbose)
         start_timer("Computing ranks... ");
-    r = vector<uint32_t> (n, 0);
-    vector<size_t> indices(n, 0);
-    vector< RowVectorXd > slicenorms(n);
-    for (int dim = 0; dim < n; ++dim) {
-        slicenorms[dim] = RowVectorXd(s[dim]);
+    d.r = vector<uint32_t> (d.n, 0);
+    vector<size_t> indices(d.n, 0);
+    vector< RowVectorXd > slicenorms(d.n);
+    for (int dim = 0; dim < d.n; ++dim) {
+        slicenorms[dim] = RowVectorXd(d.s[dim]);
         slicenorms[dim].setZero();
     }
     for (size_t i = 0; i < size; ++i) {
         if (current[i] > 0)
-            for (int dim = 0; dim < n; ++dim)
+            for (int dim = 0; dim < d.n; ++dim)
                 slicenorms[dim][indices[dim]] += double(current[i])*current[i];
         indices[0]++;
         int pos = 0;
-        while (indices[pos] >= s[pos] and pos < n-1) {
+        while (indices[pos] >= d.s[pos] and pos < d.n-1) {
             indices[pos] = 0;
             pos++;
             indices[pos]++;
         }
     }
 
-    for (int dim = 0; dim < n; ++dim) {
-        for (size_t i = 0; i < s[dim]; ++i) {
+    for (int dim = 0; dim < d.n; ++dim) {
+        for (size_t i = 0; i < d.s[dim]; ++i) {
             if (slicenorms[dim][i] > 0)
-                r[dim] = i+1;
+                d.r[dim] = i+1;
             slicenorms[dim][i] = sqrt(slicenorms[dim][i]);
         }
     }
@@ -453,21 +463,22 @@ double *compress(string input_file, string compressed_file, string io_type, Targ
 
     if (verbose) {
         cout << "Compressed tensor ranks:";
-        for (uint8_t i = 0; i < n; ++i)
-            cout << " " << r[i];
+        for (uint8_t i = 0; i < d.n; ++i)
+            cout << " " << d.r[i];
         cout << endl;
     }
-    write_stream(reinterpret_cast<unsigned char*> (&r[0]), n*sizeof(r[0]));
+    write_stream(reinterpret_cast<unsigned char*> (&d.r[0]), d.n*sizeof(d.r[0]));
 
-    for (uint8_t i = 0; i < n; ++i)
-        write_stream(reinterpret_cast<uint8_t*> (slicenorms[i].data()), r[i]*sizeof(double));
+    for (uint8_t i = 0; i < d.n; ++i)
+        write_stream(reinterpret_cast<uint8_t*> (slicenorms[i].data()), d.r[i]*sizeof(double));
 
     open_wbit();
-    for (int dim = 0; dim < n; ++dim) {
-        MatrixXd Uweighted = Us[dim].leftCols(r[dim]);
-        for (size_t col = 0; col < r[dim]; ++col)
+    core_info.is_core = false;
+    for (int dim = 0; dim < d.n; ++dim) {
+        MatrixXd Uweighted = Us[dim].leftCols(d.r[dim]);
+        for (size_t col = 0; col < d.r[dim]; ++col)
             Uweighted.col(col) = Uweighted.col(col)*slicenorms[dim][col];
-        encode_array(Uweighted.data(), s[dim]*r[dim], 0, core_nplanes, false);  //*(s[i]*s[i]/sprod[n]));
+        encode_array(d, Uweighted.data(), d.s[dim]*d.r[dim], 0, core_info, false);  //*(s[i]*s[i]/sprod[n]));
     }
     close_wbit();
     close_write();
