@@ -190,6 +190,9 @@ int main(int argc, char *argv[])
     else if (skip_bytes_flag)
         display_error("Flag -k needs -i");
 
+    if (skip_bytes_flag and skip_bytes % sizeof(double))
+        display_error("Due to alignment, only headers whose size is multiple of " + to_string(sizeof(double)) + " are supported");
+
     if (not compressed_flag or compressed_file == "")
         display_error("Specify a file name for the compressed data set (-c)");
 
@@ -223,7 +226,7 @@ int main(int argc, char *argv[])
         data = compress(d, input_file, compressed_file, io_type, target, target_value, skip_bytes, verbose_flag, debug_flag);
     if (output_flag)
         decompress(d, compressed_file, output_file, data, cutout, autocrop_flag, verbose_flag, debug_flag);
-    delete[] (data-skip_bytes);
+    delete[] data;
 
     return 0;
 }

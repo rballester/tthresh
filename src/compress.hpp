@@ -340,42 +340,43 @@ double *compress(dimensions d, string input_file, string compressed_file, string
 
     if (verbose)
         start_timer("Loading and casting input data... ");
-    input_stream.seekg(0, ios::beg);
+    input_stream.seekg(skip_bytes);
     char *in = new char[size * io_type_size];
     input_stream.read(in, size * io_type_size);
     input_stream.close();
 
     // Cast the data to doubles
-    double *data;
     double datamin = numeric_limits < double >::max(); // Tensor statistics
     double datamax = numeric_limits < double >::min();
     double datanorm = 0;
-    if (io_type == "double")
-        data = (double *) in + skip_bytes;
+
+    double *data;
+    if (io_type == "double")  // Input is already in doubles; no need to create another buffer for conversion
+        data = (double *)(in);
     else
         data = new double[size];
     for (size_t i = 0; i < size; ++i) {
         switch (io_type_code) {
             case 0:
-                data[i] = *reinterpret_cast< unsigned char* >(&in[skip_bytes + i * io_type_size]);
+                data[i] = *reinterpret_cast< unsigned char* >(&in[i * io_type_size]);
                 break;
             case 1:
-                data[i] = *reinterpret_cast< unsigned short* >(&in[skip_bytes + i * io_type_size]);
+                data[i] = *reinterpret_cast< unsigned short* >(&in[i * io_type_size]);
                 break;
             case 2:
-                data[i] = *reinterpret_cast< int* >(&in[skip_bytes + i * io_type_size]);
+                data[i] = *reinterpret_cast< int* >(&in[i * io_type_size]);
                 break;
             case 3:
-                data[i] = *reinterpret_cast< float* >(&in[skip_bytes + i * io_type_size]);
+                data[i] = *reinterpret_cast< float* >(&in[i * io_type_size]);
                 break;
         }
-        datamin = min(datamin, data[i]); // Compute statistics, since we're at it
+        datamin = min(datamin, data[i]); // Use the loop to update the statistics as well
         datamax = max(datamax, data[i]);
         datanorm += data[i] * data[i];
     }
     datanorm = sqrt(datanorm);
     if (io_type_code != 4)
-        delete[]in;
+        delete[] in;
     if (verbose)
         stop_timer();
     if (debug) cout << "Input statistics: min = " << datamin << ", max = " << datamax << ", norm = " << datanorm << endl;

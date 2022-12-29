@@ -101,7 +101,7 @@ void print_usage() {
 
     cout << "Optional compression parameters:" << endl;
     cout << endl;
-    cout << "\t-k <n>                    - Skip n leading bytes, for e.g. removing a header (integer)" << endl;
+    cout << "\t-k <n>                    - Skip n leading bytes, for e.g. removing a header (integer multiple of " + to_string(sizeof(double)) + ")" << endl;
     cout << endl;
 
     cout << "Optional decompression parameters:" << endl;
