@@ -40,6 +40,10 @@ typedef struct {
 
 vector<uint64_t> encode_array(dimensions d, double* c, size_t size, double sse, core_struct& core_info, bool verbose=false) {
 
+    // If size is 0 (only happens if data was all zeros), return empty vector
+    if (size == 0)
+        return vector<uint64_t>();
+
     size_t total_bits = 0;
 
     /******************************************/
@@ -57,9 +61,7 @@ vector<uint64_t> encode_array(dimensions d, double* c, size_t size, double sse, 
         g[i] = abs(c[i]);
         normsq += c[i]*c[i];
     }
-
     int msplane = static_cast<int>(std::floor(std::log2(maximum)));
-
     int k;
     if (core_info.is_core) {
         k = static_cast<int>(std::floor(std::log2(3 * sse / size) / 2)) - 1; // In the end, k will be the last encoded plane
@@ -68,7 +70,6 @@ vector<uint64_t> encode_array(dimensions d, double* c, size_t size, double sse, 
     }
     else
         k = msplane-core_info.core_nplanes+0;
-    
     double plane_sse = 0;  // Only for factors: total SSE incurred by truncating the current plane
     vector<double> plane_sses; // Only for factors: SSE incurred by each plane
     long i = 0; // Used to find the breakpoint
@@ -472,7 +473,6 @@ double *compress(dimensions d, string input_file, string compressed_file, string
 
     for (uint8_t i = 0; i < d.n; ++i)
         write_stream(reinterpret_cast<uint8_t*> (slicenorms[i].data()), d.r[i]*sizeof(double));
-
     open_wbit();
     core_info.is_core = false;
     for (int dim = 0; dim < d.n; ++dim) {

@@ -21,6 +21,10 @@ using namespace Eigen;
 
 vector<uint64_t> decode_array(size_t size, bool is_core, int& q, size_t& pointer, double& maximum, bool verbose, bool debug) {
 
+    // If size is 0 (only happens if data was all zeros), return empty vector
+    if (size == 0)
+        return vector<uint64_t>();
+
     uint64_t tmp = read_bits(64);
     memcpy(&maximum, (void*)&tmp, sizeof(tmp));
 
@@ -370,6 +374,8 @@ void decompress(dimensions d, string compressed_file, string output_file, double
     if (whole_reconstruction and not autocrop and data != NULL) {
         datanorm = sqrt(datanorm);
         double eps = sqrt(sse) / datanorm;
+        if (datanorm == 0)  // Special case: data is all zeros
+            eps = 0;
         double rmse = sqrt(sse / size);
         double psnr = 20 * log10((datamax - datamin) / (2 * rmse));
         cout << "eps = " << eps << ", rmse = " << rmse << ", psnr = " << psnr << endl;
