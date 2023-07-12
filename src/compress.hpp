@@ -219,7 +219,7 @@ vector<uint64_t> encode_array(dimensions d, double* c, size_t size, double sse, 
                 double factor_incurred_sse = cumulative_plane_sses[plane_sses.size() - 1 - (63-q)];
                 double factor_eps_delta = sqrt(factor_k_sse / (normsq - factor_incurred_sse));
                 
-                if (factor_size_delta / factor_eps_delta >= core_info.core_price/d.n)
+                if (factor_k_sse > 0 and factor_size_delta / factor_eps_delta >= core_info.core_price/d.n)
                     done = true;
             }
         }
