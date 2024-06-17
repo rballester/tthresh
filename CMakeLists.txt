@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 
 project(tthresh CXX)
-#set(CMAKE_CXX_STANDARD 11)
+#set(CMAKE_CXX_STANDARD 17)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY VALUE Release)
@@ -26,4 +26,4 @@ file(GLOB sources src/*.cpp)
 add_executable(tthresh ${sources})
 include_directories(${EIGEN_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS})
 target_link_libraries(tthresh ${ZLIB_LIBRARY})
-add_definitions(-std=c++11)
+add_definitions(-std=c++17)
