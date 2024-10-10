@@ -330,7 +330,7 @@ void decompress(dimensions d, string compressed_file, string output_file, double
     double sse = 0;
     double datanorm = 0;
     double datamin = std::numeric_limits < double >::max();
-    double datamax = std::numeric_limits < double >::min();
+    double datamax = std::numeric_limits < double >::lowest();
     double remapped = 0;
     for (size_t i = 0; i < d.snewprod[d.n]; ++i) {
         if (io_type_code == 0) {

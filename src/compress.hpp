@@ -348,7 +348,7 @@ double *compress(dimensions d, string input_file, string compressed_file, string
 
     // Cast the data to doubles
     double datamin = numeric_limits < double >::max(); // Tensor statistics
-    double datamax = numeric_limits < double >::min();
+    double datamax = numeric_limits < double >::lowest();
     double datanorm = 0;
 
     double *data;
